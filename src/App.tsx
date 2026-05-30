@@ -103,6 +103,8 @@ function App() {
     source: 'Demo',
     featureCount: 0,
     geometryType: 'None',
+    isReadyForAnalysis: false,
+    warning: 'Draw a project feature to create project_input.',
   })
 
   useEffect(() => {
@@ -173,7 +175,7 @@ function App() {
             <Settings2 size={17} />
             Settings
           </button>
-          <button className="primary-button" type="button">
+          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis}>
             <Play size={17} fill="currentColor" />
             Run Analysis
           </button>
@@ -204,6 +206,14 @@ function App() {
                 Features
                 <input value={String(projectSketch.featureCount || 8)} readOnly />
               </label>
+            </div>
+            <div className={`input-readiness ${projectSketch.isReadyForAnalysis ? 'ready' : 'waiting'}`}>
+              <ShieldCheck size={15} />
+              <span>
+                {projectSketch.isReadyForAnalysis
+                  ? `${projectSketch.projectInput?.geometryType} project_input ready`
+                  : projectSketch.warning}
+              </span>
             </div>
           </div>
 
@@ -366,6 +376,7 @@ function App() {
 }
 
 export default App
+
 
 
 

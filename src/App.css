@@ -776,3 +776,32 @@ input {
   opacity: .72;
 }
 
+
+.input-readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.input-readiness.ready {
+  color: #17613a;
+  background: #eff8f3;
+  border: 1px solid #cfe8d9;
+}
+
+.input-readiness.waiting {
+  color: #725b18;
+  background: #fff8e8;
+  border: 1px solid #f0dfb8;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}

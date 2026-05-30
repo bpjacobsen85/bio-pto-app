@@ -13,10 +13,23 @@ import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import '@arcgis/core/assets/esri/themes/light/main.css'
 import './ArcGISMap.css'
 
+export type ProjectInputFeatureSet = {
+  geometryType: 'esriGeometryPoint' | 'esriGeometryPolyline' | 'esriGeometryPolygon'
+  spatialReference: Record<string, unknown>
+  fields: Array<{ name: string; type: string; alias: string }>
+  features: Array<{
+    geometry: Record<string, unknown>
+    attributes: Record<string, unknown>
+  }>
+}
+
 export type ProjectSketchSummary = {
   source: 'Sketch' | 'Demo'
   featureCount: number
   geometryType: string
+  isReadyForAnalysis: boolean
+  warning?: string
+  projectInput?: ProjectInputFeatureSet
 }
 
 type ArcGISMapProps = {
@@ -40,14 +53,68 @@ function makeOccurrence(x: number, y: number, color: string, label: string) {
   })
 }
 
+function toFeatureSetGeometryType(type: string | undefined): ProjectInputFeatureSet['geometryType'] | null {
+  if (type === 'point') return 'esriGeometryPoint'
+  if (type === 'polyline') return 'esriGeometryPolyline'
+  if (type === 'polygon') return 'esriGeometryPolygon'
+  return null
+}
+
 function summarizeSketch(layer: GraphicsLayer): ProjectSketchSummary {
-  const graphics = layer.graphics.toArray()
+  const graphics = layer.graphics.toArray().filter((graphic) => graphic.geometry)
   const geometryTypes = [...new Set(graphics.map((graphic) => graphic.geometry?.type).filter(Boolean))]
+  const displayGeometryType = geometryTypes.length === 0 ? 'None' : geometryTypes.join(', ')
+
+  if (graphics.length === 0) {
+    return {
+      source: 'Demo',
+      featureCount: 0,
+      geometryType: 'None',
+      isReadyForAnalysis: false,
+      warning: 'Draw a project feature to create project_input.',
+    }
+  }
+
+  if (geometryTypes.length !== 1) {
+    return {
+      source: 'Sketch',
+      featureCount: graphics.length,
+      geometryType: displayGeometryType,
+      isReadyForAnalysis: false,
+      warning: 'Use one geometry type per run. Delete mixed sketches and draw only points, lines, or polygons.',
+    }
+  }
+
+  const geometryType = toFeatureSetGeometryType(geometryTypes[0])
+  if (!geometryType) {
+    return {
+      source: 'Sketch',
+      featureCount: graphics.length,
+      geometryType: displayGeometryType,
+      isReadyForAnalysis: false,
+      warning: 'Unsupported sketch geometry type.',
+    }
+  }
+
+  const firstGeometryJson = graphics[0]?.geometry?.toJSON() as Record<string, unknown> | undefined
+  const spatialReference = (firstGeometryJson?.spatialReference as Record<string, unknown> | undefined) ?? { wkid: 102100 }
 
   return {
-    source: graphics.length > 0 ? 'Sketch' : 'Demo',
+    source: 'Sketch',
     featureCount: graphics.length,
-    geometryType: geometryTypes.length === 0 ? 'None' : geometryTypes.join(', '),
+    geometryType: displayGeometryType,
+    isReadyForAnalysis: true,
+    projectInput: {
+      geometryType,
+      spatialReference,
+      fields: [
+        { name: 'OBJECTID', type: 'esriFieldTypeOID', alias: 'OBJECTID' },
+      ],
+      features: graphics.map((graphic, index) => ({
+        geometry: graphic.geometry?.toJSON() as Record<string, unknown>,
+        attributes: { OBJECTID: index + 1 },
+      })),
+    },
   }
 }
 
