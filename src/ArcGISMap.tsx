@@ -6,11 +6,22 @@ import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polyline from '@arcgis/core/geometry/Polyline'
 import Polygon from '@arcgis/core/geometry/Polygon'
+import Sketch from '@arcgis/core/widgets/Sketch'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import '@arcgis/core/assets/esri/themes/light/main.css'
 import './ArcGISMap.css'
+
+export type ProjectSketchSummary = {
+  source: 'Sketch' | 'Demo'
+  featureCount: number
+  geometryType: string
+}
+
+type ArcGISMapProps = {
+  onProjectSketchChange?: (summary: ProjectSketchSummary) => void
+}
 
 function makeOccurrence(x: number, y: number, color: string, label: string) {
   return new Graphic({
@@ -29,7 +40,18 @@ function makeOccurrence(x: number, y: number, color: string, label: string) {
   })
 }
 
-export function ArcGISMap() {
+function summarizeSketch(layer: GraphicsLayer): ProjectSketchSummary {
+  const graphics = layer.graphics.toArray()
+  const geometryTypes = [...new Set(graphics.map((graphic) => graphic.geometry?.type).filter(Boolean))]
+
+  return {
+    source: graphics.length > 0 ? 'Sketch' : 'Demo',
+    featureCount: graphics.length,
+    geometryType: geometryTypes.length === 0 ? 'None' : geometryTypes.join(', '),
+  }
+}
+
+export function ArcGISMap({ onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -37,10 +59,11 @@ export function ArcGISMap() {
 
     const projectLayer = new GraphicsLayer({ title: 'Project area demo' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results demo' })
+    const sketchLayer = new GraphicsLayer({ title: 'Project sketch input' })
 
     const map = new Map({
       basemap: 'topo-vector',
-      layers: [projectLayer, resultLayer],
+      layers: [projectLayer, resultLayer, sketchLayer],
     })
 
     const view = new MapView({
@@ -117,14 +140,70 @@ export function ArcGISMap() {
       makeOccurrence(-121.58, 38.23, '#8a94a6', 'No Potential'),
     ])
 
+    const sketch = new Sketch({
+      view,
+      layer: sketchLayer,
+      creationMode: 'update',
+      visibleElements: {
+        createTools: {
+          point: true,
+          polyline: true,
+          polygon: true,
+          rectangle: true,
+          circle: false,
+        },
+        selectionTools: {
+          'lasso-selection': false,
+          'rectangle-selection': true,
+        },
+        settingsMenu: false,
+        undoRedoMenu: true,
+      },
+      defaultCreateOptions: {
+        hasZ: false,
+      },
+      defaultUpdateOptions: {
+        toggleToolOnClick: false,
+      },
+      polygonSymbol: new SimpleFillSymbol({
+        color: [19, 59, 92, 0.18],
+        outline: { color: '#133b5c', width: 2 },
+      }),
+      polylineSymbol: new SimpleLineSymbol({
+        color: '#133b5c',
+        width: 4,
+      }),
+      pointSymbol: new SimpleMarkerSymbol({
+        style: 'circle',
+        color: '#133b5c',
+        size: 10,
+        outline: { color: '#ffffff', width: 1.5 },
+      }),
+    })
+
+    function notifySketchChange() {
+      onProjectSketchChange?.(summarizeSketch(sketchLayer))
+    }
+
+    sketch.on('create', (event) => {
+      if (event.state === 'complete') notifySketchChange()
+    })
+    sketch.on('update', (event) => {
+      if (event.state === 'complete') notifySketchChange()
+    })
+    sketch.on('delete', notifySketchChange)
+
     view.when(() => {
+      view.ui.add(sketch, 'top-right')
       view.ui.move('zoom', 'bottom-left')
+      notifySketchChange()
     })
 
     return () => {
+      sketch.destroy()
       view.destroy()
     }
-  }, [])
+  }, [onProjectSketchChange])
 
   return <div className="arcgis-map" ref={containerRef} />
 }

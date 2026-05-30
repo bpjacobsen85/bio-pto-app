@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
-import { ArcGISMap } from './ArcGISMap'
+import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 
@@ -99,6 +99,11 @@ function App() {
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
+  const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
+    source: 'Demo',
+    featureCount: 0,
+    geometryType: 'None',
+  })
 
   useEffect(() => {
     let alive = true
@@ -187,7 +192,7 @@ function App() {
             </div>
             <button className="upload-target" type="button">
               <Upload size={18} />
-              PGE_SM_Project_Components
+              {projectSketch.featureCount > 0 ? `${projectSketch.geometryType} sketch` : 'PGE_SM_Project_Components'}
               <ChevronRight size={17} />
             </button>
             <div className="field-grid two-col">
@@ -197,7 +202,7 @@ function App() {
               </label>
               <label>
                 Features
-                <input value="8" readOnly />
+                <input value={String(projectSketch.featureCount || 8)} readOnly />
               </label>
             </div>
           </div>
@@ -263,7 +268,7 @@ function App() {
             <button className="tool-button" type="button"><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap />
+            <ArcGISMap onProjectSketchChange={setProjectSketch} />
           </div>
           <div className="legend-panel">
             <h3>Potential</h3>
@@ -361,5 +366,7 @@ function App() {
 }
 
 export default App
+
+
 
 
