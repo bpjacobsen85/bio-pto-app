@@ -1,4 +1,5 @@
-﻿import {
+﻿import { useEffect, useState } from 'react'
+import {
   ArrowDownToLine,
   CheckCircle2,
   ChevronRight,
@@ -15,6 +16,7 @@
   Upload,
 } from 'lucide-react'
 import './App.css'
+import { restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 
@@ -93,6 +95,49 @@ function RatingPill({ rating }: { rating: Rating }) {
 }
 
 function App() {
+  const [user, setUser] = useState<ArcgisUser | null>(null)
+  const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
+  const [authMessage, setAuthMessage] = useState('')
+
+  useEffect(() => {
+    let alive = true
+
+    restoreArcGISSession()
+      .then((restoredUser) => {
+        if (!alive) return
+        setUser(restoredUser)
+        setAuthStatus('idle')
+      })
+      .catch(() => {
+        if (!alive) return
+        setAuthStatus('idle')
+      })
+
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  async function handleSignIn() {
+    setAuthStatus('signing-in')
+    setAuthMessage('')
+
+    try {
+      const signedInUser = await signInToArcGIS()
+      setUser(signedInUser)
+      setAuthStatus('idle')
+    } catch (error) {
+      setAuthStatus('error')
+      setAuthMessage(error instanceof Error ? error.message : 'ArcGIS sign-in failed.')
+    }
+  }
+
+  function handleSignOut() {
+    signOutOfArcGIS()
+    setUser(null)
+    setAuthStatus('idle')
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -104,7 +149,18 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
-          <button className="icon-button" type="button" aria-label="Reset analysis">
+          {authStatus === 'error' && <span className="auth-error">{authMessage}</span>}
+          {user ? (
+            <button className="user-button" type="button" onClick={handleSignOut} title="Sign out of ArcGIS">
+              <span className="user-avatar">{(user.fullName || user.username).slice(0, 1).toUpperCase()}</span>
+              <span>{user.fullName || user.username}</span>
+            </button>
+          ) : (
+            <button className="secondary-button" type="button" onClick={handleSignIn} disabled={authStatus === 'checking' || authStatus === 'signing-in'}>
+              <ShieldCheck size={17} />
+              {authStatus === 'checking' ? 'Checking...' : authStatus === 'signing-in' ? 'Signing in...' : 'Sign in'}
+            </button>
+          )}          <button className="icon-button" type="button" aria-label="Reset analysis">
             <RotateCcw size={18} />
           </button>
           <button className="secondary-button" type="button">
@@ -316,4 +372,5 @@ function App() {
 }
 
 export default App
+
 

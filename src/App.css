@@ -731,3 +731,41 @@ input {
     display: block;
   }
 }
+
+.user-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfd8e3;
+  background: #fff;
+  color: #263542;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-weight: 750;
+}
+
+.user-avatar {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #1b6ca8;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.auth-error {
+  max-width: 320px;
+  color: #a83b3b;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: .72;
+}

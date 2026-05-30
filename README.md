@@ -38,3 +38,7 @@ These are browser-side Vite variables. Do not put private admin passwords or per
 4. App polls job status and reads output parameters.
 5. App dynamically loads returned hosted layers/tables.
 6. App writes a saved-run row to `BIO_PTO_Run_History`.
+
+## Production OAuth Client ID
+
+The ArcGIS OAuth Client ID is committed in `.env.production` so Vercel can build the public app without extra configuration. This is not a secret. Keep private tokens and passwords out of repository files.
