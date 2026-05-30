@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
+import { ArcGISMap } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 
@@ -262,19 +263,7 @@ function App() {
             <button className="tool-button" type="button"><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <div className="map-grid" />
-            <div className="water water-one" />
-            <div className="water water-two" />
-            <div className="corridor" />
-            <div className="buffer-shape" />
-            <span className="occurrence occ-high" />
-            <span className="occurrence occ-high second" />
-            <span className="occurrence occ-moderate" />
-            <span className="occurrence occ-low" />
-            <span className="occurrence occ-review" />
-            <span className="occurrence occ-none" />
-            <div className="map-label project-label">PGE_SM corridor</div>
-            <div className="map-label buffer-label">5 mi buffer</div>
+            <ArcGISMap />
           </div>
           <div className="legend-panel">
             <h3>Potential</h3>

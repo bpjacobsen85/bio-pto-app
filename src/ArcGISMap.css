@@ -1,0 +1,19 @@
+﻿.arcgis-map {
+  position: absolute;
+  inset: 0;
+}
+
+.arcgis-map .esri-view-surface {
+  outline: none;
+}
+
+.arcgis-map .esri-ui-bottom-left {
+  left: 12px;
+  bottom: 12px;
+}
+
+.arcgis-map .esri-zoom {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 12px 26px rgba(27, 42, 55, .18);
+}

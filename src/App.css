@@ -326,6 +326,12 @@ input {
 .map-canvas {
   position: absolute;
   inset: 0;
+  overflow: hidden;
+}
+
+.fake-map-canvas {
+  position: absolute;
+  inset: 0;
   background:
     linear-gradient(28deg, transparent 48%, rgba(255,255,255,.42) 49%, rgba(255,255,255,.42) 50%, transparent 51%),
     linear-gradient(108deg, transparent 48%, rgba(255,255,255,.30) 49%, rgba(255,255,255,.30) 50%, transparent 51%),
@@ -769,3 +775,4 @@ input {
   cursor: wait;
   opacity: .72;
 }
+
