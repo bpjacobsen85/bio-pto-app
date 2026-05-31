@@ -234,6 +234,10 @@ input {
   color: #fff;
 }
 
+.segmented-control.compact {
+  margin: 10px 12px 8px;
+}
+
 .slider-field {
   margin-bottom: 16px;
 }
@@ -826,4 +830,5 @@ input {
     grid-template-columns: 1fr;
   }
 }
+
 

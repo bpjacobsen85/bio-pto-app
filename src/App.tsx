@@ -20,6 +20,7 @@ import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'search' | null
+type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 
 type SpeciesResult = {
   objectId: number
@@ -27,6 +28,8 @@ type SpeciesResult = {
   common: string
   scientific: string
   taxonGroup: string
+  elementType: string
+  speciesType: Exclude<SpeciesTypeFilter, 'All'>
   distanceMiles: number | null
   accuracyClass: number | null
   frequency: number | null
@@ -72,6 +75,15 @@ function formatCount(value: number | null) {
   return value === null ? '--' : value.toLocaleString()
 }
 
+function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
+  const group = taxonGroup.toLowerCase()
+  const plantGroups = ['dicot', 'monocot', 'fern', 'gymnosperm', 'conifer', 'moss', 'lichen', 'bryophyte']
+  if (plantGroups.some((term) => group.includes(term))) return 'Plants'
+
+  const fallbackType = elementType.toLowerCase()
+  return fallbackType.includes('plant') && !group ? 'Plants' : 'Animals'
+}
+
 function App() {
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
@@ -85,6 +97,7 @@ function App() {
   const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
+  const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
     featureCount: 0,
@@ -121,7 +134,7 @@ function App() {
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,PTO_Review,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -135,12 +148,16 @@ function App() {
 
         const rows = (data.features ?? []).map((feature) => {
           const attributes = feature.attributes
+          const taxonGroup = String(attributes.TAXONGROUP ?? 'Unknown')
+          const elementType = String(attributes.ELMTYPE_DESC ?? '')
           return {
             objectId: Number(attributes.ObjectId),
             rating: normalizeRating(attributes.PTO_Review),
             common: String(attributes.CNAME ?? 'Unknown common name'),
             scientific: String(attributes.SNAME ?? 'Unknown scientific name'),
-            taxonGroup: String(attributes.TAXONGROUP ?? 'Unknown'),
+            taxonGroup,
+            elementType,
+            speciesType: getSpeciesType(taxonGroup, elementType),
             distanceMiles: asNumber(attributes.Min_NEAR_DIST_Miles),
             accuracyClass: asNumber(attributes.Min_Accuracy_Class),
             frequency: asNumber(attributes.FREQUENCY),
@@ -169,14 +186,20 @@ function App() {
     }
   }, [statsTableUrl])
 
+  const filteredSpeciesResults = useMemo(() => speciesResults.filter((row) => (
+    speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter
+  )), [speciesResults, speciesTypeFilter])
+
   const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
     label,
-    count: speciesResults.filter((row) => row.rating === label).length,
-  })), [speciesResults])
+    count: filteredSpeciesResults.filter((row) => row.rating === label).length,
+  })), [filteredSpeciesResults])
 
-  const selectedSpecies = speciesResults.find((row) => row.objectId === selectedSpeciesId) ?? speciesResults[0]
-  const totalSpecies = speciesResults.length
-  const totalOccurrences = speciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
+  const selectedSpecies = filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId) ?? filteredSpeciesResults[0]
+  const totalSpecies = filteredSpeciesResults.length
+  const totalOccurrences = filteredSpeciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
+  const plantCount = speciesResults.filter((row) => row.speciesType === 'Plants').length
+  const animalCount = speciesResults.filter((row) => row.speciesType === 'Animals').length
 
   async function handleSignIn() {
     setAuthStatus('signing-in')
@@ -387,13 +410,21 @@ function App() {
               <h2>Species Results</h2>
               <button type="button"><ArrowDownToLine size={16} /></button>
             </div>
+            <div className="species-filter segmented-control compact" aria-label="Species type filter">
+              {(['All', 'Plants', 'Animals'] as SpeciesTypeFilter[]).map((filter) => (
+                <button className={speciesTypeFilter === filter ? 'selected' : ''} type="button" key={filter} onClick={() => setSpeciesTypeFilter(filter)}>
+                  {filter === 'All' ? `All ${speciesResults.length}` : filter === 'Plants' ? `Plants ${plantCount}` : `Animals ${animalCount}`}
+                </button>
+              ))}
+            </div>
             <div className="species-list">
-              {speciesResults.slice(0, 80).map((row) => (
+              {filteredSpeciesResults.slice(0, 120).map((row) => (
                 <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
                   <RatingPill rating={row.rating} />
                   <span className="species-name">
                     <strong>{row.common}</strong>
                     <em>{row.scientific}</em>
+                    <small>{row.taxonGroup || row.speciesType}</small>
                   </span>
                   <span>{formatMiles(row.distanceMiles)}</span>
                 </button>
@@ -405,7 +436,7 @@ function App() {
             <div className="detail-heading">
               {selectedSpecies ? <RatingPill rating={selectedSpecies.rating} /> : <RatingPill rating="Needs Review" />}
               <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
-              <p>{selectedSpecies?.scientific ?? statsMessage}</p>
+              <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : statsMessage}</p>
             </div>
             <div className="evidence-list">
               <span>Nearest occurrence <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
@@ -443,4 +474,6 @@ function App() {
 }
 
 export default App
+
+
 
