@@ -331,6 +331,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
+  const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
@@ -461,16 +462,24 @@ function App() {
 
   const filteredSpeciesResults = useMemo(() => speciesResults.filter((row) => (
     (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
+    && (!ratingFilter || row.rating === ratingFilter)
     && (
       conservationFilters.length === 0
       || conservationFilters.some((filter) => matchesConservationFilter(getListingCodes(row.listings), filter))
     )
-  )), [conservationFilters, speciesResults, speciesTypeFilter])
+  )), [conservationFilters, ratingFilter, speciesResults, speciesTypeFilter])
 
   const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
     label,
-    count: filteredSpeciesResults.filter((row) => row.rating === label).length,
-  })), [filteredSpeciesResults])
+    count: speciesResults.filter((row) => (
+      row.rating === label
+      && (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
+      && (
+        conservationFilters.length === 0
+        || conservationFilters.some((filter) => matchesConservationFilter(getListingCodes(row.listings), filter))
+      )
+    )).length,
+  })), [conservationFilters, speciesResults, speciesTypeFilter])
 
   const selectedSpecies = filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId) ?? filteredSpeciesResults[0]
   const totalSpecies = filteredSpeciesResults.length
@@ -693,10 +702,10 @@ function App() {
 
           <div className="summary-grid">
             {ratingCounts.map((item) => (
-              <div className={`summary-card ${item.label.toLowerCase().replaceAll(' ', '-')}`} key={item.label}>
+              <button className={`summary-card ${item.label.toLowerCase().replaceAll(' ', '-')} ${ratingFilter === item.label ? 'selected' : ''}`} type="button" key={item.label} onClick={() => setRatingFilter((current) => current === item.label ? null : item.label)}>
                 <span>{item.label}</span>
                 <strong>{item.count}</strong>
-              </div>
+              </button>
             ))}
           </div>
 
