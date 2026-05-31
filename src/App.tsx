@@ -260,6 +260,14 @@ function getPtoReasonBullets(species?: SpeciesResult) {
   ]
 }
 
+function getRuleSummary(species?: SpeciesResult) {
+  if (!species) return '--'
+  if (species.rating === 'Needs Review') return 'Needs Review (Default)'
+  if (species.rating === 'Low' && species.currentCount === 0) return 'Low (Override - No Current)'
+  if (species.rating === 'No Potential') return 'No Potential Rule'
+  return `${species.rating} Rule`
+}
+
 function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
   const group = taxonGroup.toLowerCase()
   const plantGroups = ['dicot', 'monocot', 'fern', 'gymnosperm', 'conifer', 'moss', 'lichen', 'bryophyte']
@@ -767,6 +775,19 @@ function App() {
         </section>
 
         <aside className="results-panel" aria-label="Analysis results">
+          <div className="review-header">
+            <div>
+              <p className="eyebrow">Results Review</p>
+              <h2>Project: PGE_SM</h2>
+              <small>{statsStatus === 'ready' ? 'Completed' : statsStatus} - SDGE Suncrest sample results</small>
+            </div>
+            <div className="review-actions">
+              <button type="button" onClick={() => setSetupCollapsed(false)}><Layers3 size={16} /> Open map</button>
+              <button type="button"><FileSpreadsheet size={16} /> Export Excel</button>
+              <button type="button"><FileText size={16} /> Download docs</button>
+            </div>
+          </div>
+
           <div className="run-status">
             <CheckCircle2 size={19} />
             <div>
@@ -782,6 +803,14 @@ function App() {
                 <strong>{item.count}</strong>
               </button>
             ))}
+            <div className="summary-card neutral">
+              <span>Total Species</span>
+              <strong>{speciesResults.length || totalSpecies}</strong>
+            </div>
+            <div className="summary-card neutral">
+              <span>Approx. Credits</span>
+              <strong>3.1</strong>
+            </div>
           </div>
 
           <div className="downloads-row">
@@ -842,6 +871,16 @@ function App() {
                 {getPtoReasonBullets(selectedSpecies).slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
               </ul>
             </div>
+            <div className="species-table-header">
+              <span>Potential</span>
+              <span>Common Name</span>
+              <span>Scientific Name</span>
+              <span>Distance</span>
+              <span>Accuracy</span>
+              <span>Current</span>
+              <span>Extant</span>
+              <span>Rule</span>
+            </div>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
                 <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
@@ -851,7 +890,12 @@ function App() {
                     <em>{row.scientific}</em>
                     <small>{row.taxonGroup || row.speciesType} · {getListingCodes(row.listings).map(getListingLabel).join(' · ') || 'No listing shown'}</small>
                   </span>
+                  <span className="species-scientific-cell"><em>{row.scientific}</em></span>
                   <span>{formatMiles(row.distanceMiles)}</span>
+                  <span className="species-extra-cell">{row.accuracyClass ? `Class ${row.accuracyClass}` : '--'}</span>
+                  <span className="species-extra-cell">{row.currentCount ? 'Yes' : 'No'}</span>
+                  <span className="species-extra-cell">{row.extantCount ? 'Yes' : 'No'}</span>
+                  <span className="species-extra-cell rule-cell">{getRuleSummary(row)}</span>
                 </button>
               ))}
             </div>

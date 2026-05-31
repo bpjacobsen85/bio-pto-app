@@ -124,6 +124,14 @@ h3 {
   grid-template-columns: 52px minmax(560px, 1fr) minmax(430px, 520px);
 }
 
+.workspace.setup-collapsed .map-stage {
+  display: none;
+}
+
+.workspace.setup-collapsed .results-panel {
+  grid-column: 2 / -1;
+}
+
 .setup-panel,
 .results-panel {
   min-height: 0;
@@ -564,6 +572,32 @@ input {
   padding: 14px;
 }
 
+.review-header {
+  display: none;
+}
+
+.review-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-actions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #bdd6e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1b6ca8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
 .run-status {
   gap: 10px;
   padding: 12px;
@@ -623,6 +657,10 @@ input {
 .low { color: #2f8f5b; }
 .no-potential { color: #8a94a6; }
 .needs-review { color: #7c5cc4; }
+
+.summary-card.neutral {
+  color: #5f6b7a;
+}
 
 .downloads-row {
   gap: 8px;
@@ -748,6 +786,156 @@ input {
   color: #263542;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.workspace.setup-collapsed .results-panel {
+  display: grid;
+  grid-template-columns: minmax(620px, 1fr) minmax(340px, 390px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+  background: #f6f8fa;
+}
+
+.workspace.setup-collapsed .review-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.workspace.setup-collapsed .review-header h2 {
+  font-size: 16px;
+}
+
+.workspace.setup-collapsed .review-header small {
+  display: block;
+  margin-top: 3px;
+  color: #697785;
+  font-size: 12px;
+}
+
+.workspace.setup-collapsed .run-status,
+.workspace.setup-collapsed .downloads-row {
+  display: none;
+}
+
+.workspace.setup-collapsed .summary-grid {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(7, minmax(112px, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.workspace.setup-collapsed .summary-card {
+  min-height: 78px;
+}
+
+.workspace.setup-collapsed .table-card,
+.workspace.setup-collapsed .detail-panel {
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.workspace.setup-collapsed .table-card {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+}
+
+.workspace.setup-collapsed .selected-species-card {
+  display: none;
+}
+
+.workspace.setup-collapsed .species-table-header {
+  display: grid;
+  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px minmax(150px, .95fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border-top: 1px solid #e7edf3;
+  border-bottom: 1px solid #e7edf3;
+  background: #f8fafc;
+  color: #5c6b79;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.workspace.setup-collapsed .species-list {
+  max-height: none;
+  min-height: 0;
+  border-top: 0;
+}
+
+.workspace.setup-collapsed .species-row {
+  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px minmax(150px, .95fr);
+  min-height: 62px;
+  gap: 8px;
+}
+
+.workspace.setup-collapsed .species-name em,
+.workspace.setup-collapsed .species-name small {
+  display: none;
+}
+
+.workspace.setup-collapsed .species-scientific-cell,
+.workspace.setup-collapsed .species-extra-cell {
+  display: block;
+  min-width: 0;
+  color: #263542;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.workspace.setup-collapsed .species-scientific-cell em {
+  color: #263542;
+  font-style: italic;
+}
+
+.workspace.setup-collapsed .rule-cell {
+  overflow-wrap: anywhere;
+}
+
+.workspace.setup-collapsed .detail-panel {
+  overflow: auto;
+  padding: 16px;
+}
+
+.workspace.setup-collapsed .detail-heading {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  margin: -16px -16px 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e2e8ef;
+  background: #fff;
+}
+
+@media (max-width: 1380px) {
+  .workspace.setup-collapsed .results-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 360px);
+  }
+
+  .workspace.setup-collapsed .species-table-header,
+  .workspace.setup-collapsed .species-row {
+    grid-template-columns: 82px minmax(135px, 1.2fr) minmax(135px, 1fr) 68px 72px 58px minmax(106px, .9fr);
+    gap: 6px;
+  }
+
+  .workspace.setup-collapsed .species-table-header span:nth-child(7),
+  .workspace.setup-collapsed .species-row > span:nth-child(7) {
+    display: none;
+  }
+
+  .workspace.setup-collapsed .species-row {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 }
 
 .current-summary {
@@ -893,6 +1081,10 @@ input {
   color: #124d79;
 }
 
+.species-table-header {
+  display: none;
+}
+
 .selected-species-card {
   display: grid;
   gap: 10px;
@@ -975,6 +1167,11 @@ input {
   background: #fff;
   text-align: left;
   border-left: 4px solid currentColor;
+}
+
+.species-scientific-cell,
+.species-extra-cell {
+  display: none;
 }
 
 .species-row:hover {
@@ -1160,6 +1357,17 @@ input {
     align-items: start;
   }
 
+  .workspace.setup-collapsed .results-panel {
+    grid-column: 2;
+    grid-template-columns: minmax(560px, 1fr) minmax(320px, 360px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .workspace.setup-collapsed .summary-grid {
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+  }
+
   .run-status,
   .summary-grid,
   .downloads-row,
@@ -1216,6 +1424,45 @@ input {
 
   .results-panel {
     display: block;
+  }
+
+  .workspace.setup-collapsed .results-panel {
+    grid-column: auto;
+    display: block;
+    overflow: visible;
+  }
+
+  .workspace.setup-collapsed .review-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace.setup-collapsed .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace.setup-collapsed .selected-species-card {
+    display: grid;
+  }
+
+  .workspace.setup-collapsed .species-table-header,
+  .workspace.setup-collapsed .species-scientific-cell,
+  .workspace.setup-collapsed .species-extra-cell {
+    display: none;
+  }
+
+  .workspace.setup-collapsed .species-row {
+    grid-template-columns: 92px minmax(0, 1fr) 58px;
+  }
+
+  .workspace.setup-collapsed .species-name em,
+  .workspace.setup-collapsed .species-name small {
+    display: block;
+  }
+
+  .workspace.setup-collapsed .detail-panel {
+    margin-top: 12px;
+    overflow: visible;
   }
 }
 
