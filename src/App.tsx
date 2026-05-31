@@ -36,6 +36,15 @@ type SpeciesResult = {
   extantCount: number | null
   currentCount: number | null
   recentCount: number | null
+  habitatSummary: string
+  generalHabitat: string
+  microHabitat: string
+  suitabilityReview: string
+}
+
+type SpeciesReviewEdit = {
+  rating?: Rating
+  habitatSummary?: string
 }
 
 const defaultProjectLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_SM_Project_Components/FeatureServer/2'
@@ -98,6 +107,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
+  const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
     featureCount: 0,
@@ -134,7 +144,7 @@ function App() {
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -164,6 +174,10 @@ function App() {
             extantCount: asNumber(attributes.Sum_Extant),
             currentCount: asNumber(attributes.Sum_Current_30yr),
             recentCount: asNumber(attributes.Sum_Recent_EO),
+            habitatSummary: String(attributes.PTO_Caption_1 ?? attributes.CWHR_Summary ?? attributes.Habitats ?? ''),
+            generalHabitat: String(attributes.GeneralHabitat ?? ''),
+            microHabitat: String(attributes.MicroHabitat ?? ''),
+            suitabilityReview: String(attributes.Suitability_Review ?? ''),
           }
         })
 
@@ -200,6 +214,9 @@ function App() {
   const totalOccurrences = filteredSpeciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
   const plantCount = speciesResults.filter((row) => row.speciesType === 'Plants').length
   const animalCount = speciesResults.filter((row) => row.speciesType === 'Animals').length
+  const selectedReview = selectedSpecies ? reviewEdits[selectedSpecies.objectId] : undefined
+  const selectedPotential = selectedReview?.rating ?? selectedSpecies?.rating ?? 'Needs Review'
+  const selectedHabitatSummary = selectedReview?.habitatSummary ?? selectedSpecies?.habitatSummary ?? ''
 
   async function handleSignIn() {
     setAuthStatus('signing-in')
@@ -227,6 +244,17 @@ function App() {
 
   function handleLoadProjectLayer() {
     setLoadedProjectLayerUrl(projectLayerUrl.trim())
+  }
+
+  function updateSelectedReview(update: SpeciesReviewEdit) {
+    if (!selectedSpecies) return
+    setReviewEdits((current) => ({
+      ...current,
+      [selectedSpecies.objectId]: {
+        ...current[selectedSpecies.objectId],
+        ...update,
+      },
+    }))
   }
 
   return (
@@ -403,6 +431,7 @@ function App() {
             <button type="button"><FileSpreadsheet size={16} /> Excel</button>
             <button type="button"><FileText size={16} /> Animals</button>
             <button type="button"><FileText size={16} /> Plants</button>
+            <button type="button"><FileText size={16} /> Report</button>
           </div>
 
           <div className="table-card">
@@ -434,7 +463,7 @@ function App() {
 
           <div className="detail-panel">
             <div className="detail-heading">
-              {selectedSpecies ? <RatingPill rating={selectedSpecies.rating} /> : <RatingPill rating="Needs Review" />}
+              {selectedSpecies ? <RatingPill rating={selectedPotential} /> : <RatingPill rating="Needs Review" />}
               <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
               <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : statsMessage}</p>
             </div>
@@ -447,6 +476,24 @@ function App() {
             <p className="reason-text">
               Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.
             </p>
+            <div className="review-grid">
+              <label className="review-field">
+                Reviewed potential
+                <select value={selectedPotential} onChange={(event) => updateSelectedReview({ rating: event.target.value as Rating })} disabled={!selectedSpecies}>
+                  {ratingOrder.map((rating) => <option value={rating} key={rating}>{rating}</option>)}
+                </select>
+              </label>
+              <label className="review-field full">
+                Current species description
+                <div className="current-summary">
+                  {selectedSpecies?.habitatSummary || selectedSpecies?.generalHabitat || 'No current description was found in the stats table.'}
+                </div>
+              </label>
+              <label className="review-field full">
+                Reviewer habitat summary
+                <textarea value={selectedHabitatSummary} onChange={(event) => updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
+              </label>
+            </div>
           </div>
         </aside>
       </section>
@@ -474,6 +521,7 @@ function App() {
 }
 
 export default App
+
 
 
 

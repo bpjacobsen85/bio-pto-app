@@ -523,6 +523,53 @@ input {
   font-weight: 750;
 }
 
+.review-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.review-field {
+  display: grid;
+  gap: 6px;
+  color: #5c6b79;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.review-field select,
+.review-field textarea,
+.current-summary {
+  width: 100%;
+  border: 1px solid #d4dde7;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.review-field select {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.review-field textarea {
+  min-height: 116px;
+  resize: vertical;
+  padding: 10px;
+}
+
+.current-summary {
+  max-height: 140px;
+  overflow: auto;
+  padding: 10px;
+  background: #f7fafc;
+}
+
 .table-card,
 .detail-panel {
   background: #fff;
@@ -830,5 +877,6 @@ input {
     grid-template-columns: 1fr;
   }
 }
+
 
 
