@@ -289,43 +289,6 @@ input {
   padding: 8px 10px;
 }
 
-.threshold-bar {
-  position: relative;
-  height: 58px;
-  display: grid;
-  grid-template-columns: 18% 28% 54%;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid #d6dee7;
-  margin-bottom: 14px;
-}
-
-.zone {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 9px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.high-zone { background: #d64545; }
-.moderate-zone { background: #e59f2a; }
-.low-zone { background: #2f8f5b; }
-
-.marker {
-  position: absolute;
-  bottom: 7px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.marker-a { left: 15%; }
-.marker-b { left: 43%; }
-.marker-c { right: 8px; }
-
 .criteria-label {
   margin: 0 0 8px;
   color: #4f6070;

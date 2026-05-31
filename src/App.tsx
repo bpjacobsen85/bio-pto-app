@@ -513,10 +513,6 @@ function App() {
     && ptoCriteria.moderateDistance <= ptoCriteria.lowDistance
     && ptoCriteria.lowDistance <= ptoCriteria.bufferDistance
   )
-  const criteriaDenominator = Math.max(ptoCriteria.lowDistance, 0.01)
-  const highWidth = `${Math.max(8, Math.min(100, (ptoCriteria.highDistance / criteriaDenominator) * 100))}%`
-  const moderateWidth = `${Math.max(10, Math.min(100, ((ptoCriteria.moderateDistance - ptoCriteria.highDistance) / criteriaDenominator) * 100))}%`
-  const lowWidth = `${Math.max(10, Math.min(100, ((ptoCriteria.lowDistance - ptoCriteria.moderateDistance) / criteriaDenominator) * 100))}%`
   const highDistanceLabel = formatCriteriaMiles(ptoCriteria.highDistance)
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
@@ -685,14 +681,6 @@ function App() {
             {!criteriaValid && (
               <div className="criteria-warning">Distances must increase from High to Moderate to Low, and Low cannot exceed Buffer.</div>
             )}
-            <div className="threshold-bar" aria-label="Distance thresholds" style={{ gridTemplateColumns: `${highWidth} ${moderateWidth} ${lowWidth}` }}>
-              <span className="zone high-zone">High</span>
-              <span className="zone moderate-zone">Moderate</span>
-              <span className="zone low-zone">Low</span>
-              <span className="marker marker-a">{highDistanceLabel}</span>
-              <span className="marker marker-b">{moderateDistanceLabel}</span>
-              <span className="marker marker-c">{lowDistanceLabel}</span>
-            </div>
             <div className="criteria-label">Advanced criteria</div>
             <div className="criteria-grid" aria-label="Advanced PTO criteria">
               <div className="criteria-card">
