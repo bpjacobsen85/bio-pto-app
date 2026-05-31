@@ -43,6 +43,7 @@ type ArcGISMapProps = {
   activeMapTool?: 'layers' | 'search' | null
   projectLayerUrl?: string
   cnddbLayerUrl?: string
+  selectedSpeciesName?: string
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
 }
 
@@ -130,15 +131,20 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl, onProjectSketchChange }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
   const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
+  const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
 
   useEffect(() => {
     projectUrlRef.current = projectLayerUrl?.trim() ?? ''
   }, [projectLayerUrl])
+
+  useEffect(() => {
+    selectedSpeciesRef.current = selectedSpeciesName?.trim() ?? ''
+  }, [selectedSpeciesName])
 
   useEffect(() => {
     if (!containerRef.current || !layerListRef.current || !searchRef.current) return
@@ -237,6 +243,7 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
     let featureLayerSummary: ProjectSketchSummary | null = null
     let projectFeatureLayer: FeatureLayer | null = null
     let loadedProjectUrl = ''
+    let loadedSpeciesName = ''
 
     const notifyInputChange = () => {
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
@@ -290,6 +297,26 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
 
     const layerList = new LayerList({ view, container: layerListContainer })
     const search = new SearchWidget({ view, container: searchContainer })
+
+    const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
+
+    const applySelectedSpecies = async (commonName: string) => {
+      loadedSpeciesName = commonName
+      if (!cnddbOutputLayer) return
+
+      cnddbOutputLayer.definitionExpression = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
+
+      if (!commonName) return
+
+      try {
+        const extentResult = await cnddbOutputLayer.queryExtent()
+        if (extentResult.extent) {
+          await view.goTo(extentResult.extent.expand(1.5), { duration: 650 })
+        }
+      } catch {
+        // Some output layers may not expose matching CNAME values; keep the table selection working either way.
+      }
+    }
 
     const loadProjectFeatureLayer = async (url: string) => {
       loadedProjectUrl = url
@@ -367,12 +394,19 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
         })
       }
       void loadProjectFeatureLayer(projectUrlRef.current)
+      void applySelectedSpecies(selectedSpeciesRef.current)
     })
 
     const interval = window.setInterval(() => {
       const nextUrl = projectUrlRef.current
-      if (loadedProjectUrl === nextUrl) return
-      void loadProjectFeatureLayer(nextUrl)
+      if (loadedProjectUrl !== nextUrl) {
+        void loadProjectFeatureLayer(nextUrl)
+      }
+
+      const nextSpeciesName = selectedSpeciesRef.current
+      if (loadedSpeciesName !== nextSpeciesName) {
+        void applySelectedSpecies(nextSpeciesName)
+      }
     }, 600)
 
     return () => {
@@ -394,3 +428,4 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
     </div>
   )
 }
+

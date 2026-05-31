@@ -563,6 +563,11 @@ input {
   background: #f7fafc;
 }
 
+.species-row.selected {
+  background: #eef7fb;
+  box-shadow: inset 3px 0 0 #1b6ca8;
+}
+
 .rating-pill {
   width: fit-content;
   display: inline-flex;
@@ -821,3 +826,4 @@ input {
     grid-template-columns: 1fr;
   }
 }
+

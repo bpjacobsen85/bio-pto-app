@@ -84,6 +84,7 @@ function App() {
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
   const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
     featureCount: 0,
@@ -151,6 +152,7 @@ function App() {
 
         if (!alive) return
         setSpeciesResults(rows)
+        setSelectedSpeciesId((current) => current ?? rows[0]?.objectId ?? null)
         setStatsStatus('ready')
         setStatsMessage(`${rows.length} species loaded from the SDGE Suncrest stats table.`)
       } catch (error) {
@@ -172,7 +174,7 @@ function App() {
     count: speciesResults.filter((row) => row.rating === label).length,
   })), [speciesResults])
 
-  const selectedSpecies = speciesResults[0]
+  const selectedSpecies = speciesResults.find((row) => row.objectId === selectedSpeciesId) ?? speciesResults[0]
   const totalSpecies = speciesResults.length
   const totalOccurrences = speciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
 
@@ -343,7 +345,7 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
           <div className="legend-panel">
             <h3>Potential</h3>
@@ -387,7 +389,7 @@ function App() {
             </div>
             <div className="species-list">
               {speciesResults.slice(0, 80).map((row) => (
-                <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')}`} type="button" key={row.objectId}>
+                <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
                   <RatingPill rating={row.rating} />
                   <span className="species-name">
                     <strong>{row.common}</strong>
@@ -441,3 +443,4 @@ function App() {
 }
 
 export default App
+
