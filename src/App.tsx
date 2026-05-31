@@ -6,7 +6,6 @@ import {
   FileSpreadsheet,
   FileText,
   Layers3,
-  MapPin,
   Play,
   RotateCcw,
   Search,
@@ -274,8 +273,7 @@ function App() {
 
         <section className="map-stage" aria-label="Map preview">
           <div className="map-toolbar">
-            <button className="tool-button active" type="button"><MapPin size={17} /> Sketch</button>
-            <button className="tool-button" type="button"><Layers3 size={17} /> Layers</button>
+            <button className="tool-button active" type="button"><Layers3 size={17} /> Layers</button>
             <button className="tool-button" type="button"><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
@@ -377,9 +375,4 @@ function App() {
 }
 
 export default App
-
-
-
-
-
 

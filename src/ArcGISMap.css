@@ -17,3 +17,29 @@
   overflow: hidden;
   box-shadow: 0 12px 26px rgba(27, 42, 55, .18);
 }
+
+.arcgis-map .esri-ui-top-right {
+  top: 14px;
+  right: 14px;
+}
+
+.arcgis-map .esri-sketch {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 14px 30px rgba(27, 42, 55, .16);
+}
+
+.arcgis-map .esri-sketch__panel {
+  max-width: 300px;
+}
+
+@media (max-width: 820px) {
+  .arcgis-map .esri-ui-top-right {
+    top: 58px;
+    right: 12px;
+  }
+
+  .arcgis-map .esri-sketch__panel {
+    max-width: calc(100vw - 48px);
+  }
+}
