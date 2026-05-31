@@ -519,16 +519,17 @@ function App() {
                   {ratingOrder.map((rating) => <option value={rating} key={rating}>{rating}</option>)}
                 </select>
               </label>
-              <label className="review-field full">
-                Current species description
-                <div className="current-summary">
-                  {selectedSpecies?.habitatSummary || selectedSpecies?.generalHabitat || 'No current description was found in the stats table.'}
+              <section className="report-summary-card">
+                <div className="report-summary-heading">
+                  <span>Final Report Description</span>
+                  <strong>{selectedPotential}</strong>
                 </div>
-              </label>
-              <label className="review-field full">
-                Reviewer habitat summary
-                <textarea value={selectedHabitatSummary} onChange={(event) => updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
-              </label>
+                <textarea aria-label="Final report description" value={selectedHabitatSummary} onChange={(event) => updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
+              </section>
+              <section className="source-summary-card">
+                <h3>Model-Generated Report Summary</h3>
+                <p>{selectedSpecies?.habitatSummary || selectedSpecies?.generalHabitat || 'No current description was found in the stats table.'}</p>
+              </section>
             </div>
           </div>
         </aside>
@@ -557,6 +558,7 @@ function App() {
 }
 
 export default App
+
 
 
 

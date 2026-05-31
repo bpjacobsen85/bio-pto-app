@@ -540,7 +540,8 @@ input {
 
 .review-field select,
 .review-field textarea,
-.current-summary {
+.current-summary,
+.report-summary-card textarea {
   width: 100%;
   border: 1px solid #d4dde7;
   border-radius: 6px;
@@ -561,6 +562,69 @@ input {
   min-height: 116px;
   resize: vertical;
   padding: 10px;
+}
+
+.report-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #b7d6e8;
+  border-radius: 8px;
+  background: #eef8fd;
+  box-shadow: inset 4px 0 0 #1b6ca8;
+}
+
+.report-summary-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.report-summary-heading span {
+  color: #133b5c;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.report-summary-heading strong {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: #133b5c;
+  font-size: 11px;
+}
+
+.report-summary-card textarea {
+  min-height: 150px;
+  resize: vertical;
+  padding: 12px;
+  border-color: #9fc7dc;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.source-summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.source-summary-card h3 {
+  margin: 0;
+  color: #5c6b79;
+  font-size: 12px;
+}
+
+.source-summary-card p {
+  margin: 0;
+  color: #263542;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .current-summary {
@@ -925,6 +989,7 @@ input {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
