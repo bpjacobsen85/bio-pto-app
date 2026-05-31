@@ -120,6 +120,10 @@ h3 {
   padding: 14px;
 }
 
+.workspace.setup-collapsed {
+  grid-template-columns: 52px minmax(560px, 1fr) minmax(430px, 520px);
+}
+
 .setup-panel,
 .results-panel {
   min-height: 0;
@@ -127,6 +131,62 @@ h3 {
   background: #fbfcfd;
   border: 1px solid #dce3ea;
   border-radius: 8px;
+}
+
+.setup-panel.collapsed {
+  display: grid;
+  place-items: start center;
+  overflow: hidden;
+  padding: 8px 0;
+}
+
+.setup-panel.collapsed .panel-section {
+  display: none;
+}
+
+.setup-panel-toolbar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e2e8ef;
+  color: #4f6070;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.setup-panel-toolbar button,
+.setup-rail-button {
+  border: 1px solid #d4dde7;
+  border-radius: 6px;
+  background: #fff;
+  color: #425160;
+}
+
+.setup-panel-toolbar button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.setup-rail-button {
+  width: 38px;
+  min-height: 124px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-weight: 850;
+}
+
+.setup-rail-button span {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 }
 
 .panel-section {
@@ -1088,6 +1148,10 @@ input {
     grid-template-columns: 300px minmax(420px, 1fr);
   }
 
+  .workspace.setup-collapsed {
+    grid-template-columns: 52px minmax(420px, 1fr);
+  }
+
   .results-panel {
     grid-column: 1 / -1;
     display: grid;
@@ -1123,6 +1187,27 @@ input {
     height: auto;
     min-height: 0;
     grid-template-columns: 1fr;
+  }
+
+  .workspace.setup-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-panel.collapsed {
+    min-height: 52px;
+    place-items: center start;
+    padding: 7px 10px;
+  }
+
+  .setup-rail-button {
+    width: auto;
+    min-height: 36px;
+    display: inline-flex;
+    padding: 0 10px;
+  }
+
+  .setup-rail-button span {
+    writing-mode: horizontal-tb;
   }
 
   .map-stage {

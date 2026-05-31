@@ -6,6 +6,8 @@ import {
   FileSpreadsheet,
   FileText,
   Layers3,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   RotateCcw,
   Search,
@@ -344,6 +346,7 @@ function App() {
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
+  const [setupCollapsed, setSetupCollapsed] = useState(false)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
@@ -554,6 +557,14 @@ function App() {
     setLoadedProjectLayerUrl(projectLayerUrl.trim())
   }
 
+  function handleRunAnalysis() {
+    setSetupCollapsed(true)
+  }
+
+  function handleResetAnalysis() {
+    setSetupCollapsed(false)
+  }
+
   function updateSelectedReview(update: SpeciesReviewEdit) {
     if (!selectedSpecies) return
     setReviewEdits((current) => ({
@@ -596,22 +607,35 @@ function App() {
               {authStatus === 'checking' ? 'Checking...' : authStatus === 'signing-in' ? 'Signing in...' : 'Sign in'}
             </button>
           )}
-          <button className="icon-button" type="button" aria-label="Reset analysis">
+          <button className="icon-button" type="button" aria-label="Reset analysis" onClick={handleResetAnalysis}>
             <RotateCcw size={18} />
           </button>
           <button className="secondary-button" type="button">
             <Settings2 size={17} />
             Settings
           </button>
-          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis}>
+          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis} onClick={handleRunAnalysis}>
             <Play size={17} fill="currentColor" />
             Run Analysis
           </button>
         </div>
       </header>
 
-      <section className="workspace">
-        <aside className="setup-panel" aria-label="Analysis setup">
+      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''}`}>
+        <aside className={`setup-panel ${setupCollapsed ? 'collapsed' : ''}`} aria-label="Analysis setup">
+          {setupCollapsed ? (
+            <button className="setup-rail-button" type="button" onClick={() => setSetupCollapsed(false)} aria-label="Show analysis setup">
+              <PanelLeftOpen size={18} />
+              <span>Setup</span>
+            </button>
+          ) : (
+            <div className="setup-panel-toolbar">
+              <span>Analysis Setup</span>
+              <button type="button" onClick={() => setSetupCollapsed(true)} aria-label="Collapse analysis setup">
+                <PanelLeftClose size={17} />
+              </button>
+            </div>
+          )}
           <div className="panel-section active-step">
             <div className="section-heading">
               <span className="step-index">1</span>
