@@ -6,11 +6,30 @@
   </head>
   <body>
     <p>Completing ArcGIS sign in...</p>
-    <script src="https://js.arcgis.com/4.34/"></script>
     <script>
-      require(["esri/identity/IdentityManager"], function (esriId) {
-        esriId.completeOAuth2();
-      });
+      (function () {
+        var search = window.location.search || "";
+        var hash = window.location.hash || "";
+
+        if (window.opener && !window.opener.closed) {
+          if (hash) {
+            window.opener.dispatchEvent(
+              new CustomEvent("arcgis:auth:hash", { detail: hash })
+            );
+          }
+
+          if (search) {
+            window.opener.dispatchEvent(
+              new CustomEvent("arcgis:auth:location:search", { detail: search })
+            );
+          }
+
+          window.close();
+          return;
+        }
+
+        window.location.replace("/" + search + hash);
+      })();
     </script>
   </body>
 </html>
