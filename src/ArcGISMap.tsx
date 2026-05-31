@@ -2,11 +2,14 @@
 import Map from '@arcgis/core/Map'
 import MapView from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
+import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polyline from '@arcgis/core/geometry/Polyline'
 import Polygon from '@arcgis/core/geometry/Polygon'
 import Sketch from '@arcgis/core/widgets/Sketch'
+import LayerList from '@arcgis/core/widgets/LayerList'
+import SearchWidget from '@arcgis/core/widgets/Search'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
@@ -23,16 +26,23 @@ export type ProjectInputFeatureSet = {
   }>
 }
 
+export type ProjectLayerInput = {
+  url: string
+}
+
 export type ProjectSketchSummary = {
-  source: 'Sketch' | 'Demo'
+  source: 'Sketch' | 'FeatureLayer' | 'Demo'
   featureCount: number
   geometryType: string
   isReadyForAnalysis: boolean
   warning?: string
-  projectInput?: ProjectInputFeatureSet
+  projectInput?: ProjectInputFeatureSet | ProjectLayerInput
 }
 
 type ArcGISMapProps = {
+  activeMapTool?: 'layers' | 'search' | null
+  projectLayerUrl?: string
+  cnddbLayerUrl?: string
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
 }
 
@@ -60,20 +70,12 @@ function toFeatureSetGeometryType(type: string | undefined): ProjectInputFeature
   return null
 }
 
-function summarizeSketch(layer: GraphicsLayer): ProjectSketchSummary {
+function summarizeSketch(layer: GraphicsLayer): ProjectSketchSummary | null {
   const graphics = layer.graphics.toArray().filter((graphic) => graphic.geometry)
   const geometryTypes = [...new Set(graphics.map((graphic) => graphic.geometry?.type).filter(Boolean))]
   const displayGeometryType = geometryTypes.length === 0 ? 'None' : geometryTypes.join(', ')
 
-  if (graphics.length === 0) {
-    return {
-      source: 'Demo',
-      featureCount: 0,
-      geometryType: 'None',
-      isReadyForAnalysis: false,
-      warning: 'Draw a project feature to create project_input.',
-    }
-  }
+  if (graphics.length === 0) return null
 
   if (geometryTypes.length !== 1) {
     return {
@@ -118,19 +120,44 @@ function summarizeSketch(layer: GraphicsLayer): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ onProjectSketchChange }: ArcGISMapProps) {
+function emptySummary(): ProjectSketchSummary {
+  return {
+    source: 'Demo',
+    featureCount: 0,
+    geometryType: 'None',
+    isReadyForAnalysis: false,
+    warning: 'Draw a project feature or load a feature service layer to create project_input.',
+  }
+}
+
+export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const layerListRef = useRef<HTMLDivElement | null>(null)
+  const searchRef = useRef<HTMLDivElement | null>(null)
+  const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
 
   useEffect(() => {
-    if (!containerRef.current) return
+    projectUrlRef.current = projectLayerUrl?.trim() ?? ''
+  }, [projectLayerUrl])
 
-    const projectLayer = new GraphicsLayer({ title: 'Project area demo' })
-    const resultLayer = new GraphicsLayer({ title: 'PTO results demo' })
+  useEffect(() => {
+    if (!containerRef.current || !layerListRef.current || !searchRef.current) return
+
+    const projectLayer = new GraphicsLayer({ title: 'Demo project corridor' })
+    const resultLayer = new GraphicsLayer({ title: 'Demo PTO results' })
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input' })
+    const cnddbOutputLayer = cnddbLayerUrl?.trim()
+      ? new FeatureLayer({
+        url: cnddbLayerUrl.trim(),
+        title: 'SDGE Suncrest CNDDB results',
+        outFields: ['*'],
+        opacity: 0.72,
+      })
+      : null
 
     const map = new Map({
       basemap: 'topo-vector',
-      layers: [projectLayer, resultLayer, sketchLayer],
+      layers: cnddbOutputLayer ? [projectLayer, resultLayer, cnddbOutputLayer, sketchLayer] : [projectLayer, resultLayer, sketchLayer],
     })
 
     const view = new MapView({
@@ -193,7 +220,7 @@ export function ArcGISMap({ onProjectSketchChange }: ArcGISMapProps) {
       }),
       popupTemplate: {
         title: 'PGE_SM corridor',
-        content: 'Demo project feature. Next step: add sketch/select input.',
+        content: 'Demo project feature. Load a project feature layer or sketch a new project input.',
       },
     })
 
@@ -206,6 +233,14 @@ export function ArcGISMap({ onProjectSketchChange }: ArcGISMapProps) {
       makeOccurrence(-121.38, 38.62, '#7c5cc4', 'Needs Review'),
       makeOccurrence(-121.58, 38.23, '#8a94a6', 'No Potential'),
     ])
+
+    let featureLayerSummary: ProjectSketchSummary | null = null
+    let projectFeatureLayer: FeatureLayer | null = null
+    let loadedProjectUrl = ''
+
+    const notifyInputChange = () => {
+      onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
+    }
 
     const sketch = new Sketch({
       view,
@@ -248,29 +283,114 @@ export function ArcGISMap({ onProjectSketchChange }: ArcGISMapProps) {
       }),
     })
 
-    function notifySketchChange() {
-      onProjectSketchChange?.(summarizeSketch(sketchLayer))
+    const layerListContainer = document.createElement('div')
+    const searchContainer = document.createElement('div')
+    layerListRef.current.replaceChildren(layerListContainer)
+    searchRef.current.replaceChildren(searchContainer)
+
+    const layerList = new LayerList({ view, container: layerListContainer })
+    const search = new SearchWidget({ view, container: searchContainer })
+
+    const loadProjectFeatureLayer = async (url: string) => {
+      loadedProjectUrl = url
+
+      if (projectFeatureLayer) {
+        map.remove(projectFeatureLayer)
+        projectFeatureLayer.destroy()
+        projectFeatureLayer = null
+        featureLayerSummary = null
+      }
+
+      if (!url) {
+        notifyInputChange()
+        return
+      }
+
+      const layer = new FeatureLayer({
+        url,
+        title: 'Project feature service input',
+        outFields: ['*'],
+        opacity: 0.82,
+      })
+
+      projectFeatureLayer = layer
+      map.add(layer, 2)
+
+      try {
+        await layer.load()
+        const featureCount = await layer.queryFeatureCount()
+        const geometryType = layer.geometryType ?? 'unknown'
+
+        featureLayerSummary = {
+          source: 'FeatureLayer',
+          featureCount,
+          geometryType,
+          isReadyForAnalysis: featureCount > 0 && ['point', 'polyline', 'polygon'].includes(geometryType),
+          warning: featureCount > 0 ? undefined : 'The loaded feature layer has no features.',
+          projectInput: { url },
+        }
+
+        notifyInputChange()
+
+        const extentResult = await layer.queryExtent()
+        if (extentResult.extent) {
+          await view.goTo(extentResult.extent.expand(1.35), { duration: 700 })
+        }
+      } catch (error) {
+        featureLayerSummary = {
+          source: 'FeatureLayer',
+          featureCount: 0,
+          geometryType: 'Unknown',
+          isReadyForAnalysis: false,
+          warning: error instanceof Error ? error.message : 'Could not load the feature service layer.',
+        }
+        notifyInputChange()
+      }
     }
 
     sketch.on('create', (event) => {
-      if (event.state === 'complete') notifySketchChange()
+      if (event.state === 'complete') notifyInputChange()
     })
     sketch.on('update', (event) => {
-      if (event.state === 'complete') notifySketchChange()
+      if (event.state === 'complete') notifyInputChange()
     })
-    sketch.on('delete', notifySketchChange)
+    sketch.on('delete', notifyInputChange)
 
     view.when(() => {
       view.ui.add(sketch, 'top-right')
       view.ui.move('zoom', 'bottom-left')
-      notifySketchChange()
+      if (cnddbOutputLayer) {
+        void cnddbOutputLayer.when(() => {
+          if (cnddbOutputLayer.fullExtent) {
+            void view.goTo(cnddbOutputLayer.fullExtent.expand(1.2), { duration: 700 })
+          }
+        })
+      }
+      void loadProjectFeatureLayer(projectUrlRef.current)
     })
 
+    const interval = window.setInterval(() => {
+      const nextUrl = projectUrlRef.current
+      if (loadedProjectUrl === nextUrl) return
+      void loadProjectFeatureLayer(nextUrl)
+    }, 600)
+
     return () => {
+      window.clearInterval(interval)
+      layerList.destroy()
+      search.destroy()
       sketch.destroy()
+      projectFeatureLayer?.destroy()
+      cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [onProjectSketchChange])
+  }, [cnddbLayerUrl, onProjectSketchChange])
 
-  return <div className="arcgis-map" ref={containerRef} />
+  return (
+    <div className="arcgis-map-shell">
+      <div className="arcgis-map" ref={containerRef} />
+      <div className={`map-widget-panel layer-widget-panel ${activeMapTool === 'layers' ? 'open' : ''}`} ref={layerListRef} />
+      <div className={`map-widget-panel search-widget-panel ${activeMapTool === 'search' ? 'open' : ''}`} ref={searchRef} />
+    </div>
+  )
 }

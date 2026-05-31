@@ -1,4 +1,8 @@
-﻿.arcgis-map {
+﻿.arcgis-map-shell {
+  position: absolute;
+  inset: 0;
+}
+.arcgis-map {
   position: absolute;
   inset: 0;
 }
@@ -42,4 +46,27 @@
   .arcgis-map .esri-sketch__panel {
     max-width: calc(100vw - 48px);
   }
+}
+
+.map-widget-panel {
+  position: absolute;
+  z-index: 4;
+  top: 58px;
+  left: 14px;
+  width: min(340px, calc(100% - 28px));
+  max-height: 360px;
+  overflow: auto;
+  display: none;
+  border: 1px solid #d5dee7;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 14px 30px rgba(27, 42, 55, .16);
+}
+
+.map-widget-panel.open {
+  display: block;
+}
+
+.search-widget-panel {
+  overflow: visible;
 }

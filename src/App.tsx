@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownToLine,
   CheckCircle2,
@@ -19,91 +19,77 @@ import { restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser 
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
+type MapTool = 'layers' | 'search' | null
 
-const ratingCounts: Array<{ label: Rating; count: number }> = [
-  { label: 'High', count: 18 },
-  { label: 'Moderate', count: 46 },
-  { label: 'Low', count: 201 },
-  { label: 'No Potential', count: 7 },
-  { label: 'Needs Review', count: 40 },
-]
-
-const species: Array<{
+type SpeciesResult = {
+  objectId: number
   rating: Rating
   common: string
   scientific: string
-  distance: string
-  accuracy: string
-  current: string
-  extant: string
-}> = [
-  {
-    rating: 'High',
-    common: 'Vernal Pool Fairy Shrimp',
-    scientific: 'Branchinecta lynchi',
-    distance: '0.08 mi',
-    accuracy: 'Class 2',
-    current: 'Yes',
-    extant: 'Yes',
-  },
-  {
-    rating: 'Low',
-    common: 'California Tiger Salamander',
-    scientific: 'Ambystoma californiense',
-    distance: '0.30 mi',
-    accuracy: 'Class 5',
-    current: 'No',
-    extant: 'Yes',
-  },
-  {
-    rating: 'Moderate',
-    common: 'Burrowing Owl',
-    scientific: 'Athene cunicularia',
-    distance: '0.74 mi',
-    accuracy: 'Class 3',
-    current: 'Yes',
-    extant: 'Yes',
-  },
-  {
-    rating: 'No Potential',
-    common: 'Valley Elderberry Longhorn Beetle',
-    scientific: 'Desmocerus californicus dimorphus',
-    distance: '3.80 mi',
-    accuracy: 'Class 2',
-    current: 'No',
-    extant: 'No',
-  },
-  {
-    rating: 'Needs Review',
-    common: "Swainson's Hawk",
-    scientific: 'Buteo swainsoni',
-    distance: '1.20 mi',
-    accuracy: 'Class 9',
-    current: 'Unknown',
-    extant: 'Yes',
-  },
-]
+  taxonGroup: string
+  distanceMiles: number | null
+  accuracyClass: number | null
+  frequency: number | null
+  extantCount: number | null
+  currentCount: number | null
+  recentCount: number | null
+}
+
+const defaultProjectLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_SM_Project_Components/FeatureServer/2'
+const defaultCnddbLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
+const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
+const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
 
 const savedRuns = [
-  { name: 'PGE_SM', date: 'Today', species: 312, status: 'Complete' },
+  { name: 'SDGE_Suncrest', date: 'Today', species: 0, status: 'Loaded' },
+  { name: 'PGE_SM', date: 'May 29', species: 312, status: 'Complete' },
   { name: 'Transmission Alt 2', date: 'May 28', species: 148, status: 'Complete' },
-  { name: 'Solar Site A', date: 'May 26', species: 0, status: 'Failed' },
 ]
 
 function RatingPill({ rating }: { rating: Rating }) {
   return <span className={`rating-pill ${rating.toLowerCase().replaceAll(' ', '-')}`}>{rating}</span>
 }
 
+function normalizeRating(value: unknown): Rating {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (text === 'high') return 'High'
+  if (text === 'moderate') return 'Moderate'
+  if (text === 'low') return 'Low'
+  if (text === 'no potential') return 'No Potential'
+  return 'Needs Review'
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function formatMiles(value: number | null) {
+  if (value === null || Number.isNaN(value)) return '--'
+  return `${value.toFixed(value < 1 ? 2 : 1)} mi`
+}
+
+function formatCount(value: number | null) {
+  return value === null ? '--' : value.toLocaleString()
+}
+
 function App() {
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
+  const [activeMapTool, setActiveMapTool] = useState<MapTool>('layers')
+  const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
+  const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState('')
+  const [statsTableUrl] = useState(defaultStatsTableUrl)
+  const [cnddbLayerUrl] = useState(defaultCnddbLayerUrl)
+  const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
+  const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
     featureCount: 0,
     geometryType: 'None',
     isReadyForAnalysis: false,
-    warning: 'Draw a project feature to create project_input.',
+    warning: 'Draw a project feature or load a feature service layer to create project_input.',
   })
 
   useEffect(() => {
@@ -125,6 +111,71 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    let alive = true
+
+    async function loadStatsTable() {
+      setStatsStatus('loading')
+      setStatsMessage('Loading SDGE Suncrest CNDDB stats...')
+
+      const query = new URL(`${statsTableUrl}/query`)
+      query.searchParams.set('where', '1=1')
+      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,PTO_Review,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('returnGeometry', 'false')
+      query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
+      query.searchParams.set('resultRecordCount', '500')
+      query.searchParams.set('f', 'json')
+
+      try {
+        const response = await fetch(query.toString())
+        if (!response.ok) throw new Error(`Stats table request failed: ${response.status}`)
+        const data = await response.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
+        if (data.error) throw new Error(data.error.message ?? 'Stats table returned an ArcGIS error.')
+
+        const rows = (data.features ?? []).map((feature) => {
+          const attributes = feature.attributes
+          return {
+            objectId: Number(attributes.ObjectId),
+            rating: normalizeRating(attributes.PTO_Review),
+            common: String(attributes.CNAME ?? 'Unknown common name'),
+            scientific: String(attributes.SNAME ?? 'Unknown scientific name'),
+            taxonGroup: String(attributes.TAXONGROUP ?? 'Unknown'),
+            distanceMiles: asNumber(attributes.Min_NEAR_DIST_Miles),
+            accuracyClass: asNumber(attributes.Min_Accuracy_Class),
+            frequency: asNumber(attributes.FREQUENCY),
+            extantCount: asNumber(attributes.Sum_Extant),
+            currentCount: asNumber(attributes.Sum_Current_30yr),
+            recentCount: asNumber(attributes.Sum_Recent_EO),
+          }
+        })
+
+        if (!alive) return
+        setSpeciesResults(rows)
+        setStatsStatus('ready')
+        setStatsMessage(`${rows.length} species loaded from the SDGE Suncrest stats table.`)
+      } catch (error) {
+        if (!alive) return
+        setStatsStatus('error')
+        setStatsMessage(error instanceof Error ? error.message : 'Could not load stats table.')
+      }
+    }
+
+    void loadStatsTable()
+
+    return () => {
+      alive = false
+    }
+  }, [statsTableUrl])
+
+  const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
+    label,
+    count: speciesResults.filter((row) => row.rating === label).length,
+  })), [speciesResults])
+
+  const selectedSpecies = speciesResults[0]
+  const totalSpecies = speciesResults.length
+  const totalOccurrences = speciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
+
   async function handleSignIn() {
     setAuthStatus('signing-in')
     setAuthMessage('')
@@ -143,6 +194,14 @@ function App() {
     signOutOfArcGIS()
     setUser(null)
     setAuthStatus('idle')
+  }
+
+  function toggleMapTool(tool: Exclude<MapTool, null>) {
+    setActiveMapTool((current) => current === tool ? null : tool)
+  }
+
+  function handleLoadProjectLayer() {
+    setLoadedProjectLayerUrl(projectLayerUrl.trim())
   }
 
   return (
@@ -194,24 +253,31 @@ function App() {
             </div>
             <button className="upload-target" type="button">
               <Upload size={18} />
-              {projectSketch.featureCount > 0 ? `${projectSketch.geometryType} sketch` : 'PGE_SM_Project_Components'}
+              {projectSketch.source === 'FeatureLayer' ? 'ArcGIS feature service layer' : projectSketch.featureCount > 0 ? `${projectSketch.geometryType} sketch` : 'PGE_SM_Project_Components'}
               <ChevronRight size={17} />
             </button>
+            <div className="field-grid layer-url-grid">
+              <label>
+                Feature service layer URL
+                <input value={projectLayerUrl} onChange={(event) => setProjectLayerUrl(event.target.value)} />
+              </label>
+              <button className="secondary-button" type="button" onClick={handleLoadProjectLayer}>Load layer</button>
+            </div>
             <div className="field-grid two-col">
               <label>
                 Project name
-                <input value="PGE_SM" readOnly />
+                <input value="SDGE_Suncrest" readOnly />
               </label>
               <label>
                 Features
-                <input value={String(projectSketch.featureCount || 8)} readOnly />
+                <input value={String(projectSketch.featureCount)} readOnly />
               </label>
             </div>
             <div className={`input-readiness ${projectSketch.isReadyForAnalysis ? 'ready' : 'waiting'}`}>
               <ShieldCheck size={15} />
               <span>
                 {projectSketch.isReadyForAnalysis
-                  ? `${projectSketch.projectInput?.geometryType} project_input ready`
+                  ? `${projectSketch.source} ${projectSketch.geometryType} project_input ready`
                   : projectSketch.warning}
               </span>
             </div>
@@ -256,28 +322,28 @@ function App() {
             <div className="section-heading">
               <span className="step-index">3</span>
               <div>
-                <h2>Estimate</h2>
-                <p>Preflight based on selected geometry and rule settings.</p>
+                <h2>Loaded Results</h2>
+                <p>Current SDGE Suncrest output services.</p>
               </div>
             </div>
             <div className="estimate-grid">
-              <span>CNDDB selected</span>
-              <strong>5,812</strong>
-              <span>Runtime</span>
-              <strong>8-15 min</strong>
-              <span>Credits</span>
-              <strong>~3.2</strong>
+              <span>Species rows</span>
+              <strong>{totalSpecies.toLocaleString()}</strong>
+              <span>CNDDB records</span>
+              <strong>{totalOccurrences.toLocaleString()}</strong>
+              <span>Status</span>
+              <strong>{statsStatus}</strong>
             </div>
           </div>
         </aside>
 
         <section className="map-stage" aria-label="Map preview">
           <div className="map-toolbar">
-            <button className="tool-button active" type="button"><Layers3 size={17} /> Layers</button>
-            <button className="tool-button" type="button"><Search size={17} /> Search</button>
+            <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
+            <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} onProjectSketchChange={setProjectSketch} />
           </div>
           <div className="legend-panel">
             <h3>Potential</h3>
@@ -294,8 +360,8 @@ function App() {
           <div className="run-status">
             <CheckCircle2 size={19} />
             <div>
-              <h2>Ready to review</h2>
-              <p>312 species in the current result set</p>
+              <h2>{statsStatus === 'ready' ? 'SDGE Suncrest loaded' : statsStatus === 'error' ? 'Results need attention' : 'Loading results'}</h2>
+              <p>{statsMessage}</p>
             </div>
           </div>
 
@@ -320,14 +386,14 @@ function App() {
               <button type="button"><ArrowDownToLine size={16} /></button>
             </div>
             <div className="species-list">
-              {species.map((row) => (
-                <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')}`} type="button" key={row.common}>
+              {speciesResults.slice(0, 80).map((row) => (
+                <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')}`} type="button" key={row.objectId}>
                   <RatingPill rating={row.rating} />
                   <span className="species-name">
                     <strong>{row.common}</strong>
                     <em>{row.scientific}</em>
                   </span>
-                  <span>{row.distance}</span>
+                  <span>{formatMiles(row.distanceMiles)}</span>
                 </button>
               ))}
             </div>
@@ -335,18 +401,18 @@ function App() {
 
           <div className="detail-panel">
             <div className="detail-heading">
-              <RatingPill rating="Low" />
-              <h2>California Tiger Salamander</h2>
-              <p>Ambystoma californiense</p>
+              {selectedSpecies ? <RatingPill rating={selectedSpecies.rating} /> : <RatingPill rating="Needs Review" />}
+              <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
+              <p>{selectedSpecies?.scientific ?? statsMessage}</p>
             </div>
             <div className="evidence-list">
-              <span>Nearest occurrence <strong>0.30 mi</strong></span>
-              <span>Accuracy <strong>Class 5</strong></span>
-              <span>Current record <strong>No</strong></span>
-              <span>Extant record <strong>Yes</strong></span>
+              <span>Nearest occurrence <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
+              <span>Accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
+              <span>Occurrences <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
+              <span>Extant records <strong>{formatCount(selectedSpecies?.extantCount ?? null)}</strong></span>
             </div>
             <p className="reason-text">
-              Candidate Moderate was downgraded to Low because the no-current-record override is enabled.
+              Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.
             </p>
           </div>
         </aside>
@@ -363,7 +429,7 @@ function App() {
               <ShieldCheck size={17} />
               <span>
                 <strong>{run.name}</strong>
-                <small>{run.date} · {run.species || '--'} species</small>
+                <small>{run.date} - {run.species || totalSpecies || '--'} species</small>
               </span>
               <em>{run.status}</em>
             </button>
@@ -375,4 +441,3 @@ function App() {
 }
 
 export default App
-
