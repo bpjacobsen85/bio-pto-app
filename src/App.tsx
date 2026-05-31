@@ -168,7 +168,8 @@ function App() {
               <ShieldCheck size={17} />
               {authStatus === 'checking' ? 'Checking...' : authStatus === 'signing-in' ? 'Signing in...' : 'Sign in'}
             </button>
-          )}          <button className="icon-button" type="button" aria-label="Reset analysis">
+          )}
+          <button className="icon-button" type="button" aria-label="Reset analysis">
             <RotateCcw size={18} />
           </button>
           <button className="secondary-button" type="button">
@@ -376,6 +377,7 @@ function App() {
 }
 
 export default App
+
 
 
 
