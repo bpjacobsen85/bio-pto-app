@@ -715,26 +715,70 @@ input {
   padding: 0;
 }
 
-.listing-filter {
+.conservation-filter {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px 12px;
   color: #5c6b79;
   font-size: 12px;
   font-weight: 750;
 }
 
-.listing-filter select {
-  min-height: 34px;
-  width: 100%;
-  padding: 0 10px;
+.filter-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.filter-heading-row button {
+  min-height: 24px;
+  padding: 0 8px;
   border: 1px solid #d4dde7;
-  border-radius: 6px;
+  border-radius: 999px;
   background: #fff;
-  color: #17202a;
+  color: #476172;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.filter-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip-grid button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #d4dde7;
+  border-radius: 999px;
+  background: #fff;
+  color: #425160;
   font: inherit;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.filter-chip-grid.primary button {
+  background: #f7fafc;
+}
+
+.filter-chip-grid.codes {
+  max-height: 78px;
+  overflow: auto;
+  padding-top: 2px;
+}
+
+.filter-chip-grid.codes button {
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.filter-chip-grid button.selected {
+  border-color: #1b6ca8;
+  background: #eaf6fc;
+  color: #124d79;
 }
 
 .species-list {

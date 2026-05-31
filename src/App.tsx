@@ -21,7 +21,7 @@ import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'search' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
-type ListingFilter = 'All' | string
+type ConservationFilter = string
 
 type SpeciesResult = {
   objectId: number
@@ -64,6 +64,37 @@ const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgi
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
 const animalLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/4'
 const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
+const federalStatusCodes = new Set(['FE', 'FT', 'FPE', 'FPT', 'FC'])
+const stateStatusCodes = new Set(['SE', 'ST', 'SCE', 'SCT', 'SC'])
+const cdfwStatusCodes = new Set(['SSC', 'WL', 'CDFW FP', 'CDFW_FP', 'FP'])
+const agencySensitiveCodes = new Set(['BLM_S', 'USFS_S'])
+const statusDefinitions: Record<string, string> = {
+  FE: 'Federal Endangered',
+  FT: 'Federal Threatened',
+  FPE: 'Federal Proposed Endangered',
+  FPT: 'Federal Proposed Threatened',
+  FC: 'Federal Candidate',
+  SE: 'State Endangered',
+  ST: 'State Threatened',
+  SCE: 'State Candidate Endangered',
+  SCT: 'State Candidate Threatened',
+  SC: 'State Candidate',
+  SSC: 'Species of Special Concern',
+  WL: 'Watch List',
+  'CDFW FP': 'CDFW Fully Protected',
+  CDFW_FP: 'CDFW Fully Protected',
+  FP: 'Fully Protected',
+  BLM_S: 'BLM Sensitive',
+  USFS_S: 'USFS Sensitive',
+}
+const conservationGroupFilters = [
+  { id: 'group:federal', label: 'Federal ESA' },
+  { id: 'group:state', label: 'California CESA' },
+  { id: 'group:cdfw', label: 'CDFW special status' },
+  { id: 'group:rare-plant', label: 'Rare plant rank' },
+  { id: 'group:agency', label: 'Agency sensitive' },
+  { id: 'group:none', label: 'No listing shown' },
+]
 
 const savedRuns = [
   { name: 'SDGE_Suncrest', date: 'Today', species: 0, status: 'Loaded' },
@@ -103,15 +134,50 @@ function formatElevation(low: number | null, high: number | null) {
   return `${(low ?? high)?.toLocaleString()} ft`
 }
 
-function formatListing(value: string) {
-  return value.trim() || 'No listing shown'
-}
-
 function getListingCodes(value: string) {
   return value
     .split(';')
     .map((code) => code.trim())
     .filter(Boolean)
+}
+
+function getListingLabel(code: string) {
+  if (statusDefinitions[code]) return statusDefinitions[code]
+  if (/^\d[A-B]?\.\d$/.test(code)) {
+    const [rank, threat] = code.split('.')
+    const rankText = rank === '1B'
+      ? 'Rare/threatened/endangered in CA and elsewhere'
+      : rank === '2B'
+        ? 'Rare/threatened/endangered in CA, more common elsewhere'
+        : rank === '4'
+          ? 'Limited distribution'
+          : 'California Rare Plant Rank'
+    const threatText = threat === '1'
+      ? 'seriously threatened'
+      : threat === '2'
+        ? 'moderately threatened'
+        : threat === '3'
+          ? 'not very threatened'
+          : 'threat rank'
+    return `CRPR ${code} - ${rankText}; ${threatText}`
+  }
+  return code
+}
+
+function getConservationGroups(codes: string[]) {
+  const groups = new Set<string>()
+  if (!codes.length) groups.add('group:none')
+  if (codes.some((code) => federalStatusCodes.has(code))) groups.add('group:federal')
+  if (codes.some((code) => stateStatusCodes.has(code))) groups.add('group:state')
+  if (codes.some((code) => cdfwStatusCodes.has(code))) groups.add('group:cdfw')
+  if (codes.some((code) => /^\d[A-B]?\.\d$/.test(code))) groups.add('group:rare-plant')
+  if (codes.some((code) => agencySensitiveCodes.has(code))) groups.add('group:agency')
+  return groups
+}
+
+function matchesConservationFilter(codes: string[], filter: ConservationFilter) {
+  if (filter.startsWith('code:')) return codes.includes(filter.replace('code:', ''))
+  return getConservationGroups(codes).has(filter)
 }
 
 function joinSentences(parts: Array<string | undefined>) {
@@ -232,7 +298,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
-  const [listingFilter, setListingFilter] = useState<ListingFilter>('All')
+  const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
@@ -350,15 +416,18 @@ function App() {
     }
   }, [statsTableUrl])
 
-  const listingOptions = useMemo(() => Array.from(new Set(
+  const listingCodeOptions = useMemo(() => Array.from(new Set(
     speciesResults
       .flatMap((row) => getListingCodes(row.listings))
   )).sort((a, b) => a.localeCompare(b)), [speciesResults])
 
   const filteredSpeciesResults = useMemo(() => speciesResults.filter((row) => (
     (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
-    && (listingFilter === 'All' || getListingCodes(row.listings).includes(listingFilter))
-  )), [listingFilter, speciesResults, speciesTypeFilter])
+    && (
+      conservationFilters.length === 0
+      || conservationFilters.some((filter) => matchesConservationFilter(getListingCodes(row.listings), filter))
+    )
+  )), [conservationFilters, speciesResults, speciesTypeFilter])
 
   const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
     label,
@@ -413,6 +482,14 @@ function App() {
         ...update,
       },
     }))
+  }
+
+  function toggleConservationFilter(filter: ConservationFilter) {
+    setConservationFilters((current) => (
+      current.includes(filter)
+        ? current.filter((item) => item !== filter)
+        : [...current, filter]
+    ))
   }
 
   return (
@@ -604,13 +681,28 @@ function App() {
                 </button>
               ))}
             </div>
-            <label className="listing-filter">
-              Listing status
-              <select value={listingFilter} onChange={(event) => setListingFilter(event.target.value)}>
-                <option value="All">All listing codes</option>
-                {listingOptions.map((listing) => <option value={listing} key={listing}>{listing}</option>)}
-              </select>
-            </label>
+            <div className="conservation-filter">
+              <div className="filter-heading-row">
+                <span>Conservation status</span>
+                {conservationFilters.length > 0 && (
+                  <button type="button" onClick={() => setConservationFilters([])}>Clear</button>
+                )}
+              </div>
+              <div className="filter-chip-grid primary">
+                {conservationGroupFilters.map((filter) => (
+                  <button className={conservationFilters.includes(filter.id) ? 'selected' : ''} type="button" key={filter.id} onClick={() => toggleConservationFilter(filter.id)}>
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <div className="filter-chip-grid codes">
+                {listingCodeOptions.map((code) => (
+                  <button className={conservationFilters.includes(`code:${code}`) ? 'selected' : ''} type="button" key={code} onClick={() => toggleConservationFilter(`code:${code}`)} title={getListingLabel(code)}>
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
                 <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
@@ -618,7 +710,7 @@ function App() {
                   <span className="species-name">
                     <strong>{row.common}</strong>
                     <em>{row.scientific}</em>
-                    <small>{row.taxonGroup || row.speciesType} · {formatListing(row.listings)}</small>
+                    <small>{row.taxonGroup || row.speciesType} · {getListingCodes(row.listings).map(getListingLabel).join(' · ') || 'No listing shown'}</small>
                   </span>
                   <span>{formatMiles(row.distanceMiles)}</span>
                 </button>
@@ -637,7 +729,7 @@ function App() {
               <span>Accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
               <span>Occurrences <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
               <span>Extant records <strong>{formatCount(selectedSpecies?.extantCount ?? null)}</strong></span>
-              <span>Listing status <strong>{selectedSpecies ? formatListing(selectedSpecies.listings) : '--'}</strong></span>
+              <span>Listing status <strong>{selectedSpecies ? getListingCodes(selectedSpecies.listings).map(getListingLabel).join('; ') || 'No listing shown' : '--'}</strong></span>
             </div>
             <p className="reason-text">
               Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.
