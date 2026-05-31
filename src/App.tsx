@@ -3,7 +3,6 @@ import {
   ArrowDownToLine,
   CheckCircle2,
   ChevronRight,
-  FileSpreadsheet,
   FileText,
   Layers3,
   PanelLeftClose,
@@ -23,6 +22,8 @@ type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'search' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
+type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
+type ReportStatus = 'idle' | 'generating' | 'ready'
 
 type SpeciesResult = {
   objectId: number
@@ -62,6 +63,7 @@ type SpeciesResult = {
 type SpeciesReviewEdit = {
   rating?: Rating
   habitatSummary?: string
+  status?: ReviewStatus
 }
 
 type PtoCriteria = {
@@ -77,6 +79,7 @@ const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgi
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
 const animalLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/4'
 const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
+const reviewStatusOrder: ReviewStatus[] = ['Not Started', 'In Review', 'Reviewed', 'Needs Senior Review']
 const federalStatusCodes = new Set(['FE', 'FT', 'FPE', 'FPT', 'FC'])
 const stateStatusCodes = new Set(['SE', 'ST', 'SCE', 'SCT', 'SC'])
 const cdfwStatusCodes = new Set(['SSC', 'WL', 'CDFW FP', 'CDFW_FP', 'FP'])
@@ -117,6 +120,10 @@ const savedRuns = [
 
 function RatingPill({ rating }: { rating: Rating }) {
   return <span className={`rating-pill ${rating.toLowerCase().replaceAll(' ', '-')}`}>{rating}</span>
+}
+
+function ReviewStatusPill({ status }: { status: ReviewStatus }) {
+  return <span className={`review-status-pill ${status.toLowerCase().replaceAll(' ', '-')}`}>{status}</span>
 }
 
 function normalizeRating(value: unknown): Rating {
@@ -355,6 +362,7 @@ function App() {
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [setupCollapsed, setSetupCollapsed] = useState(false)
+  const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
@@ -515,6 +523,17 @@ function App() {
   const animalCount = speciesResults.filter((row) => row.speciesType === 'Animals').length
   const selectedReview = selectedSpecies ? reviewEdits[selectedSpecies.objectId] : undefined
   const selectedPotential = selectedReview?.rating ?? selectedSpecies?.rating ?? 'Needs Review'
+  const getSpeciesReviewStatus = (species?: SpeciesResult): ReviewStatus => {
+    if (!species) return 'Not Started'
+    const edit = reviewEdits[species.objectId]
+    if (edit?.status) return edit.status
+    if (edit?.rating || edit?.habitatSummary) return 'In Review'
+    return 'Not Started'
+  }
+  const selectedReviewStatus = getSpeciesReviewStatus(selectedSpecies)
+  const reviewedSpeciesCount = speciesResults.filter((row) => getSpeciesReviewStatus(row) === 'Reviewed').length
+  const inReviewSpeciesCount = speciesResults.filter((row) => getSpeciesReviewStatus(row) === 'In Review').length
+  const notStartedSpeciesCount = Math.max(0, speciesResults.length - reviewedSpeciesCount - inReviewSpeciesCount - speciesResults.filter((row) => getSpeciesReviewStatus(row) === 'Needs Senior Review').length)
   const speciesLibraryDescription = buildSpeciesLibraryDescription(selectedSpecies)
   const automatedPtoSummary = selectedSpecies?.habitatSummary || 'No automated PTO summary was found in the stats table.'
   const selectedHabitatSummary = selectedReview?.habitatSummary ?? buildFinalReportDescription(selectedSpecies)
@@ -579,9 +598,16 @@ function App() {
       ...current,
       [selectedSpecies.objectId]: {
         ...current[selectedSpecies.objectId],
+        status: update.status ?? current[selectedSpecies.objectId]?.status ?? 'In Review',
         ...update,
       },
     }))
+  }
+
+  function handleGenerateReport() {
+    if (!speciesResults.length || reportStatus === 'generating') return
+    setReportStatus('generating')
+    window.setTimeout(() => setReportStatus('ready'), 1200)
   }
 
   function toggleConservationFilter(filter: ConservationFilter) {
@@ -783,8 +809,6 @@ function App() {
             </div>
             <div className="review-actions">
               <button type="button" onClick={() => setSetupCollapsed(false)}><Layers3 size={16} /> Open map</button>
-              <button type="button"><FileSpreadsheet size={16} /> Export Excel</button>
-              <button type="button"><FileText size={16} /> Download docs</button>
             </div>
           </div>
 
@@ -811,13 +835,34 @@ function App() {
               <span>Approx. Credits</span>
               <strong>3.1</strong>
             </div>
+            <div className="summary-card neutral review-progress-card">
+              <span>Reviewed</span>
+              <strong>{reviewedSpeciesCount}/{speciesResults.length || totalSpecies}</strong>
+            </div>
           </div>
 
-          <div className="downloads-row">
-            <button type="button"><FileSpreadsheet size={16} /> Excel</button>
-            <button type="button"><FileText size={16} /> Animals</button>
-            <button type="button"><FileText size={16} /> Plants</button>
-            <button type="button"><FileText size={16} /> Report</button>
+          <div className="report-action-row">
+            <div className="review-progress-strip" aria-label="Species review progress">
+              <span><strong>{reviewedSpeciesCount}</strong> reviewed</span>
+              <span><strong>{inReviewSpeciesCount}</strong> in review</span>
+              <span><strong>{notStartedSpeciesCount}</strong> not started</span>
+            </div>
+            <button className="primary-button" type="button" onClick={handleGenerateReport} disabled={!speciesResults.length || reportStatus === 'generating'}>
+              <FileText size={16} />
+              {reportStatus === 'generating' ? 'Generating Report...' : 'Generate Report'}
+            </button>
+            {reportStatus === 'ready' && (
+              <div className="report-download-cards">
+                <button type="button" className="word-download-card">
+                  <FileText size={20} />
+                  <span><strong>Animals PTO</strong><small>Word document</small></span>
+                </button>
+                <button type="button" className="word-download-card">
+                  <FileText size={20} />
+                  <span><strong>Plants PTO</strong><small>Word document</small></span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="table-card">
@@ -879,6 +924,7 @@ function App() {
               <span>Accuracy</span>
               <span>Current</span>
               <span>Extant</span>
+              <span>Review</span>
               <span>Rule</span>
             </div>
             <div className="species-list">
@@ -895,6 +941,7 @@ function App() {
                   <span className="species-extra-cell">{row.accuracyClass ? `Class ${row.accuracyClass}` : '--'}</span>
                   <span className="species-extra-cell">{row.currentCount ? 'Yes' : 'No'}</span>
                   <span className="species-extra-cell">{row.extantCount ? 'Yes' : 'No'}</span>
+                  <span className="species-extra-cell review-status-cell"><ReviewStatusPill status={getSpeciesReviewStatus(row)} /></span>
                   <span className="species-extra-cell rule-cell">{getRuleSummary(row)}</span>
                 </button>
               ))}
@@ -904,6 +951,7 @@ function App() {
           <div className="detail-panel">
             <div className="detail-heading">
               {selectedSpecies ? <RatingPill rating={selectedPotential} /> : <RatingPill rating="Needs Review" />}
+              <ReviewStatusPill status={selectedReviewStatus} />
               <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
               <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : statsMessage}</p>
             </div>
@@ -955,11 +1003,20 @@ function App() {
             )}
             <div className="review-grid">
               <label className="review-field">
+                Review status
+                <select value={selectedReviewStatus} onChange={(event) => updateSelectedReview({ status: event.target.value as ReviewStatus })} disabled={!selectedSpecies}>
+                  {reviewStatusOrder.map((status) => <option value={status} key={status}>{status}</option>)}
+                </select>
+              </label>
+              <label className="review-field">
                 Reviewed potential
                 <select value={selectedPotential} onChange={(event) => updateSelectedReview({ rating: event.target.value as Rating })} disabled={!selectedSpecies}>
                   {ratingOrder.map((rating) => <option value={rating} key={rating}>{rating}</option>)}
                 </select>
               </label>
+              <button className="mark-reviewed-button" type="button" onClick={() => updateSelectedReview({ status: 'Reviewed' })} disabled={!selectedSpecies}>
+                <CheckCircle2 size={16} /> Mark Reviewed
+              </button>
               <section className="report-summary-card">
                 <div className="report-summary-heading">
                   <span>Final Report Description</span>

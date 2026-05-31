@@ -660,9 +660,11 @@ input {
 
 .summary-card.neutral {
   color: #5f6b7a;
+  cursor: default;
 }
 
-.downloads-row {
+.downloads-row,
+.report-action-row {
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -671,6 +673,74 @@ input {
   flex: 1;
   font-size: 12px;
   font-weight: 750;
+}
+
+.report-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.review-progress-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-progress-strip span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #f3f6f8;
+  color: #5c6b79;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.review-progress-strip strong {
+  color: #17202a;
+}
+
+.report-download-cards {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.word-download-card {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid #c7daea;
+  border-radius: 8px;
+  background: #f7fbff;
+  color: #1b5e91;
+  text-align: left;
+}
+
+.word-download-card span {
+  display: grid;
+  gap: 2px;
+}
+
+.word-download-card strong {
+  color: #17354f;
+  font-size: 13px;
+}
+
+.word-download-card small {
+  color: #667789;
+  font-size: 11px;
 }
 
 .review-grid {
@@ -706,6 +776,18 @@ input {
 .review-field select {
   min-height: 36px;
   padding: 0 10px;
+}
+
+.mark-reviewed-button {
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid #bcdcc8;
+  border-radius: 6px;
+  background: #eff8f3;
+  color: #17613a;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .review-field textarea {
@@ -791,7 +873,7 @@ input {
 .workspace.setup-collapsed .results-panel {
   display: grid;
   grid-template-columns: minmax(620px, 1fr) minmax(340px, 390px);
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
   background: #f6f8fa;
@@ -827,8 +909,13 @@ input {
 
 .workspace.setup-collapsed .summary-grid {
   grid-column: 1 / -1;
-  grid-template-columns: repeat(7, minmax(112px, 1fr));
+  grid-template-columns: repeat(8, minmax(104px, 1fr));
   gap: 8px;
+  margin-bottom: 0;
+}
+
+.workspace.setup-collapsed .report-action-row {
+  grid-column: 1 / -1;
   margin-bottom: 0;
 }
 
@@ -853,7 +940,7 @@ input {
 
 .workspace.setup-collapsed .species-table-header {
   display: grid;
-  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px minmax(150px, .95fr);
+  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px 96px minmax(150px, .95fr);
   gap: 8px;
   align-items: center;
   min-height: 38px;
@@ -873,7 +960,7 @@ input {
 }
 
 .workspace.setup-collapsed .species-row {
-  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px minmax(150px, .95fr);
+  grid-template-columns: 100px minmax(150px, 1.1fr) minmax(150px, 1.1fr) 78px 80px 74px 70px 96px minmax(150px, .95fr);
   min-height: 62px;
   gap: 8px;
 }
@@ -923,8 +1010,8 @@ input {
 
   .workspace.setup-collapsed .species-table-header,
   .workspace.setup-collapsed .species-row {
-    grid-template-columns: 82px minmax(135px, 1.2fr) minmax(135px, 1fr) 68px 72px 58px minmax(106px, .9fr);
-    gap: 6px;
+    grid-template-columns: 75px minmax(122px, 1.2fr) minmax(122px, 1fr) 58px 62px 44px 82px minmax(76px, .8fr);
+    gap: 4px;
   }
 
   .workspace.setup-collapsed .species-table-header span:nth-child(7),
@@ -1202,6 +1289,39 @@ input {
 .rating-pill.no-potential { background: #8a94a6; }
 .rating-pill.needs-review { background: #7c5cc4; }
 
+.review-status-pill {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #d2dce6;
+  background: #f6f8fa;
+  color: #5c6b79;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.review-status-pill.in-review {
+  border-color: #c8dbef;
+  background: #edf6ff;
+  color: #1b6ca8;
+}
+
+.review-status-pill.reviewed {
+  border-color: #bcdcc8;
+  background: #eff8f3;
+  color: #17613a;
+}
+
+.review-status-pill.needs-senior-review {
+  border-color: #dcc9ef;
+  background: #f6f0ff;
+  color: #7548a9;
+}
+
 .species-name {
   display: grid;
   min-width: 0;
@@ -1360,7 +1480,7 @@ input {
   .workspace.setup-collapsed .results-panel {
     grid-column: 2;
     grid-template-columns: minmax(560px, 1fr) minmax(320px, 360px);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     align-items: stretch;
   }
 
