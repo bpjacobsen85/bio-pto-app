@@ -637,11 +637,12 @@ function App() {
       }
 
       const token = await getArcGISToken()
+      const projectInput = projectSketch.projectInput ?? { url: loadedProjectLayerUrl.trim() }
       const job = await runNotebookWebTool(
         runModelToolUrl,
         token,
         {
-          project_input: { url: loadedProjectLayerUrl.trim() },
+          project_input: projectInput,
           project_name: projectName.trim() || 'BIO_PTO_Project',
         },
         (status) => {
@@ -848,6 +849,10 @@ function App() {
                   : projectSketch.warning}
               </span>
             </div>
+            <button className="primary-button setup-run-button" type="button" disabled={!projectSketch.isReadyForAnalysis || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
+              <Play size={17} fill="currentColor" />
+              {analysisStatus === 'submitting' || analysisStatus === 'running' ? 'Running Analysis...' : 'Run Analysis'}
+            </button>
           </div>
 
           <div className="panel-section">
