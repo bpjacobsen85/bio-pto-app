@@ -142,6 +142,7 @@ function asNumber(value: unknown): number | null {
 
 function formatMiles(value: number | null) {
   if (value === null || Number.isNaN(value)) return '--'
+  if (value === 0) return 'Crosses Project'
   return `${value.toFixed(value < 1 ? 2 : 1)} mi`
 }
 
