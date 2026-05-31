@@ -716,6 +716,17 @@ input {
   margin-top: 8px;
 }
 
+.report-message {
+  grid-column: 1 / -1;
+  color: #5c6b79;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.report-message.error {
+  color: #b42318;
+}
+
 .word-download-card {
   justify-content: flex-start;
   gap: 10px;

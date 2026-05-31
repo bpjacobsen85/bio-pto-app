@@ -15,7 +15,8 @@ import {
   Upload,
 } from 'lucide-react'
 import './App.css'
-import { restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
+import { getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
+import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from './arcgisGp'
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
@@ -23,7 +24,8 @@ type MapTool = 'layers' | 'search' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
 type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
-type ReportStatus = 'idle' | 'generating' | 'ready'
+type ReportStatus = 'idle' | 'generating' | 'ready' | 'error'
+type AnalysisStatus = 'idle' | 'submitting' | 'running' | 'ready' | 'error'
 
 type SpeciesResult = {
   objectId: number
@@ -77,6 +79,8 @@ const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || 'h
 const defaultCnddbLayerUrl = import.meta.env.VITE_TEST_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
 const defaultStatsTableUrl = import.meta.env.VITE_TEST_SUMMARY_TABLE_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
+const runModelToolUrl = import.meta.env.VITE_RUN_MODEL_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/52a3ada451894a1b9a80d89241be0278/GPServer'
+const generateReportToolUrl = import.meta.env.VITE_REPORT_NOTEBOOK_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/29e2ba5e56fb42faba0f2e9d9ba06b4a/GPServer'
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
 const animalLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/4'
 const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
@@ -158,6 +162,22 @@ function formatElevation(low: number | null, high: number | null) {
   if (low === null && high === null) return '--'
   if (low !== null && high !== null) return `${low.toLocaleString()} - ${high.toLocaleString()} ft`
   return `${(low ?? high)?.toLocaleString()} ft`
+}
+
+function featureLayerZeroUrl(url: string) {
+  const trimmed = url.trim()
+  return /\/FeatureServer$/i.test(trimmed) ? `${trimmed}/0` : trimmed
+}
+
+function stringifyOutput(value: unknown) {
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2) ?? ''
+}
+
+function approximateCreditLabel(value: unknown) {
+  const text = stringifyOutput(value)
+  const match = text.match(/"?(?:total|cost|credits?|approx_credits_used)"?\s*[:=]\s*([0-9.]+)/i)
+  return match?.[1] ?? text.slice(0, 80)
 }
 
 function formatYear(value: number | null) {
@@ -351,13 +371,18 @@ function App() {
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
   const [activeMapTool, setActiveMapTool] = useState<MapTool>('layers')
+  const [projectName, setProjectName] = useState('BIO_PTO_Test')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
-  const [statsTableUrl] = useState(defaultStatsTableUrl)
-  const [cnddbLayerUrl] = useState(defaultCnddbLayerUrl)
+  const [statsTableUrl, setStatsTableUrl] = useState(defaultStatsTableUrl)
+  const [cnddbLayerUrl, setCnddbLayerUrl] = useState(defaultCnddbLayerUrl)
+  const [bufferLayerUrl, setBufferLayerUrl] = useState('')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
   const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
+  const [analysisMessage, setAnalysisMessage] = useState('Sample results are loaded for review UI testing.')
+  const [approxCreditsUsed, setApproxCreditsUsed] = useState('3.1')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
@@ -365,6 +390,8 @@ function App() {
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [setupCollapsed, setSetupCollapsed] = useState(false)
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
+  const [reportMessage, setReportMessage] = useState('')
+  const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
@@ -414,6 +441,10 @@ function App() {
       query.searchParams.set('f', 'json')
 
       try {
+        if (user) {
+          query.searchParams.set('token', await getArcGISToken())
+        }
+
         const [statsResponse, libraryDescriptions] = await Promise.all([
           fetch(query.toString()),
           loadLibraryDescriptions(),
@@ -477,7 +508,7 @@ function App() {
         setSpeciesResults(rows)
         setSelectedSpeciesId((current) => current ?? rows[0]?.objectId ?? null)
         setStatsStatus('ready')
-        setStatsMessage(`${rows.length} species loaded from the SDGE Suncrest stats table.`)
+        setStatsMessage(`${rows.length} species loaded from the current summary table.`)
       } catch (error) {
         if (!alive) return
         setStatsStatus('error')
@@ -490,7 +521,7 @@ function App() {
     return () => {
       alive = false
     }
-  }, [statsTableUrl])
+  }, [statsTableUrl, user])
 
   const listingCodeOptions = useMemo(() => Array.from(new Set(
     speciesResults
@@ -586,12 +617,80 @@ function App() {
     setLoadedProjectLayerUrl(projectLayerUrl.trim())
   }
 
-  function handleRunAnalysis() {
+  async function handleRunAnalysis() {
+    if (analysisStatus === 'submitting' || analysisStatus === 'running') return
+    if (!loadedProjectLayerUrl.trim()) {
+      setAnalysisStatus('error')
+      setAnalysisMessage('Load a project feature service layer before running the notebook tool.')
+      return
+    }
+
     setSetupCollapsed(true)
+    setAnalysisStatus('submitting')
+    setAnalysisMessage('Signing in and submitting the ArcGIS Notebook web tool...')
+
+    try {
+      let activeUser = user
+      if (!activeUser) {
+        activeUser = await signInToArcGIS()
+        setUser(activeUser)
+      }
+
+      const token = await getArcGISToken()
+      const job = await runNotebookWebTool(
+        runModelToolUrl,
+        token,
+        {
+          project_input: { url: loadedProjectLayerUrl.trim() },
+          project_name: projectName.trim() || 'BIO_PTO_Project',
+        },
+        (status) => {
+          setAnalysisStatus(status.status === 'esriJobSubmitted' ? 'submitting' : 'running')
+          setAnalysisMessage(status.messages?.at(-1)?.description ?? `Notebook status: ${status.status}`)
+        },
+      )
+
+      setAnalysisMessage('Notebook complete. Reading output service URLs...')
+      const [bufferOutput, cnddbOutput, summaryOutput, creditOutput] = await Promise.all([
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Buffer'),
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_CNDDB'),
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'Summary_Statistics'),
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'Approx_Credits_Used'),
+      ])
+
+      const nextBufferUrl = outputUrl(bufferOutput)
+      const nextCnddbUrl = outputUrl(cnddbOutput)
+      const nextSummaryUrl = outputUrl(summaryOutput)
+
+      if (!nextSummaryUrl) {
+        throw new Error('Notebook completed, but Summary_Statistics did not return a URL.')
+      }
+
+      setBufferLayerUrl(nextBufferUrl)
+      if (nextCnddbUrl) setCnddbLayerUrl(featureLayerZeroUrl(nextCnddbUrl))
+      setStatsTableUrl(nextSummaryUrl)
+      setApproxCreditsUsed(approximateCreditLabel(outputValue(creditOutput)))
+      setAnalysisStatus('ready')
+      setAnalysisMessage('Notebook run complete. The app is loading the new summary table.')
+      setReportStatus('idle')
+      setReportLinks({ animals: '', plants: '', excel: '' })
+    } catch (error) {
+      setAnalysisStatus('error')
+      setAnalysisMessage(error instanceof Error ? error.message : 'Run Analysis failed.')
+    }
   }
 
   function handleResetAnalysis() {
     setSetupCollapsed(false)
+    setStatsTableUrl(defaultStatsTableUrl)
+    setCnddbLayerUrl(defaultCnddbLayerUrl)
+    setBufferLayerUrl('')
+    setApproxCreditsUsed('3.1')
+    setAnalysisStatus('idle')
+    setAnalysisMessage('Sample results are loaded for review UI testing.')
+    setReportStatus('idle')
+    setReportMessage('')
+    setReportLinks({ animals: '', plants: '', excel: '' })
   }
 
   function updateSelectedReview(update: SpeciesReviewEdit) {
@@ -606,10 +705,49 @@ function App() {
     }))
   }
 
-  function handleGenerateReport() {
+  async function handleGenerateReport() {
     if (!speciesResults.length || reportStatus === 'generating') return
     setReportStatus('generating')
-    window.setTimeout(() => setReportStatus('ready'), 1200)
+    setReportMessage('Submitting report notebook...')
+
+    try {
+      let activeUser = user
+      if (!activeUser) {
+        activeUser = await signInToArcGIS()
+        setUser(activeUser)
+      }
+
+      const token = await getArcGISToken()
+      const job = await runNotebookWebTool(
+        generateReportToolUrl,
+        token,
+        {
+          reviewed_summary_table_url: statsTableUrl,
+          project_name: projectName.trim() || 'BIO_PTO_Project',
+          cnddb_layer_url: cnddbLayerUrl,
+        },
+        (status) => {
+          setReportMessage(status.messages?.at(-1)?.description ?? `Report notebook status: ${status.status}`)
+        },
+      )
+
+      const [excelOutput, animalsOutput, plantsOutput] = await Promise.all([
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Summary_Excel_Link'),
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Animals_Word_Doc_Link'),
+        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Plants_Word_Doc_Link'),
+      ])
+
+      setReportLinks({
+        excel: stringifyOutput(outputValue(excelOutput)).replace(/^"|"$/g, ''),
+        animals: stringifyOutput(outputValue(animalsOutput)).replace(/^"|"$/g, ''),
+        plants: stringifyOutput(outputValue(plantsOutput)).replace(/^"|"$/g, ''),
+      })
+      setReportStatus('ready')
+      setReportMessage('Report package ready.')
+    } catch (error) {
+      setReportStatus('error')
+      setReportMessage(error instanceof Error ? error.message : 'Report generation failed.')
+    }
   }
 
   function toggleConservationFilter(filter: ConservationFilter) {
@@ -650,9 +788,9 @@ function App() {
             <Settings2 size={17} />
             Settings
           </button>
-          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis} onClick={handleRunAnalysis}>
+          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
             <Play size={17} fill="currentColor" />
-            Run Analysis
+            {analysisStatus === 'submitting' || analysisStatus === 'running' ? 'Running...' : 'Run Analysis'}
           </button>
         </div>
       </header>
@@ -695,7 +833,7 @@ function App() {
             <div className="field-grid two-col">
               <label>
                 Project name
-                <input value="BIO_PTO_Test" readOnly />
+                <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
               </label>
               <label>
                 Features
@@ -769,7 +907,7 @@ function App() {
               <span className="step-index">3</span>
               <div>
                 <h2>Loaded Results</h2>
-                <p>Current SDGE Suncrest output services.</p>
+                <p>{analysisStatus === 'ready' ? 'Current notebook output services.' : 'Sample output services for testing.'}</p>
               </div>
             </div>
             <div className="estimate-grid">
@@ -779,8 +917,10 @@ function App() {
                 <strong>{totalOccurrences.toLocaleString()}</strong>
               <span>Full CNDDB</span>
               <strong>{defaultFullCnddbLayerUrl ? 'Public' : 'Unset'}</strong>
+              <span>Buffer output</span>
+              <strong>{bufferLayerUrl ? 'Ready' : 'Sample'}</strong>
               <span>Status</span>
-              <strong>{statsStatus}</strong>
+              <strong>{analysisStatus === 'idle' ? statsStatus : analysisStatus}</strong>
             </div>
           </div>
         </aside>
@@ -808,8 +948,8 @@ function App() {
           <div className="review-header">
             <div>
               <p className="eyebrow">Results Review</p>
-              <h2>Project: PGE_SM</h2>
-              <small>{statsStatus === 'ready' ? 'Completed' : statsStatus} - SDGE Suncrest sample results</small>
+              <h2>Project: {projectName || 'BIO PTO Project'}</h2>
+              <small>{analysisStatus === 'ready' ? 'Completed notebook run' : `${statsStatus} - sample results`}</small>
             </div>
             <div className="review-actions">
               <button type="button" onClick={() => setSetupCollapsed(false)}><Layers3 size={16} /> Open map</button>
@@ -819,8 +959,8 @@ function App() {
           <div className="run-status">
             <CheckCircle2 size={19} />
             <div>
-              <h2>{statsStatus === 'ready' ? 'SDGE Suncrest loaded' : statsStatus === 'error' ? 'Results need attention' : 'Loading results'}</h2>
-              <p>{statsMessage}</p>
+              <h2>{analysisStatus === 'ready' ? 'Notebook results loaded' : analysisStatus === 'error' ? 'Notebook run needs attention' : statsStatus === 'ready' ? 'Sample results loaded' : statsStatus === 'error' ? 'Results need attention' : 'Loading results'}</h2>
+              <p>{analysisStatus === 'idle' ? statsMessage : analysisMessage}</p>
             </div>
           </div>
 
@@ -837,7 +977,7 @@ function App() {
             </div>
             <div className="summary-card neutral">
               <span>Approx. Credits</span>
-              <strong>3.1</strong>
+              <strong>{approxCreditsUsed}</strong>
             </div>
             <div className="summary-card neutral review-progress-card">
               <span>Reviewed</span>
@@ -855,13 +995,14 @@ function App() {
               <FileText size={16} />
               {reportStatus === 'generating' ? 'Generating Report...' : 'Generate Report'}
             </button>
+            {reportMessage && <span className={`report-message ${reportStatus === 'error' ? 'error' : ''}`}>{reportMessage}</span>}
             {reportStatus === 'ready' && (
               <div className="report-download-cards">
-                <button type="button" className="word-download-card">
+                <button type="button" className="word-download-card" onClick={() => reportLinks.animals && window.open(reportLinks.animals, '_blank', 'noopener,noreferrer')}>
                   <FileText size={20} />
                   <span><strong>Animals PTO</strong><small>Word document</small></span>
                 </button>
-                <button type="button" className="word-download-card">
+                <button type="button" className="word-download-card" onClick={() => reportLinks.plants && window.open(reportLinks.plants, '_blank', 'noopener,noreferrer')}>
                   <FileText size={20} />
                   <span><strong>Plants PTO</strong><small>Word document</small></span>
                 </button>

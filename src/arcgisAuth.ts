@@ -68,6 +68,15 @@ export async function restoreArcGISSession(): Promise<ArcgisUser | null> {
   }
 }
 
+export async function getArcGISToken(): Promise<string> {
+  configureOAuth()
+  const credential = await IdentityManager.getCredential(`${portalUrl}/sharing`)
+  if (!credential?.token) {
+    throw new Error('ArcGIS sign-in did not return a usable token.')
+  }
+  return credential.token
+}
+
 export function signOutOfArcGIS() {
   IdentityManager.destroyCredentials()
 }
