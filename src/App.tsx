@@ -24,6 +24,7 @@ type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 
 type SpeciesResult = {
   objectId: number
+  elmCode: string
   rating: Rating
   common: string
   scientific: string
@@ -37,6 +38,8 @@ type SpeciesResult = {
   currentCount: number | null
   recentCount: number | null
   habitatSummary: string
+  libraryDescription: string
+  libraryDescriptionSource: string
   generalHabitat: string
   microHabitat: string
   suitabilityReview: string
@@ -56,6 +59,8 @@ type SpeciesReviewEdit = {
 const defaultProjectLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_SM_Project_Components/FeatureServer/2'
 const defaultCnddbLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
 const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
+const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
+const animalLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/4'
 const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
 
 const savedRuns = [
@@ -103,8 +108,17 @@ function joinSentences(parts: Array<string | undefined>) {
     .join(' ')
 }
 
+function normalizeLookupKey(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function shortenElmCode(value: unknown, length: number) {
+  return normalizeLookupKey(value).slice(0, length)
+}
+
 function buildSpeciesLibraryDescription(species?: SpeciesResult) {
   if (!species) return ''
+  if (species.libraryDescription) return species.libraryDescription
 
   const habitatText = joinSentences([
     species.generalHabitat && `General habitat: ${species.generalHabitat}`,
@@ -129,6 +143,66 @@ function getSpeciesType(taxonGroup: string, elementType: string): Exclude<Specie
 
   const fallbackType = elementType.toLowerCase()
   return fallbackType.includes('plant') && !group ? 'Plants' : 'Animals'
+}
+
+async function queryArcgisTable(url: string, outFields: string, resultRecordCount = '5000') {
+  const query = new URL(`${url}/query`)
+  query.searchParams.set('where', '1=1')
+  query.searchParams.set('outFields', outFields)
+  query.searchParams.set('returnGeometry', 'false')
+  query.searchParams.set('resultRecordCount', resultRecordCount)
+  query.searchParams.set('f', 'json')
+
+  const response = await fetch(query.toString())
+  if (!response.ok) throw new Error(`ArcGIS table request failed: ${response.status}`)
+  const data = await response.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
+  if (data.error) throw new Error(data.error.message ?? 'ArcGIS table returned an error.')
+  return data.features ?? []
+}
+
+async function loadLibraryDescriptions() {
+  const [plantFeatures, animalFeatures] = await Promise.all([
+    queryArcgisTable(plantLookupTableUrl, 'ScientificName,CommonName,ELMCODE10,ElementCode,Plant_PTO_Description,Habitat,Microhabitat,MicrohabitatDetails', '4000'),
+    queryArcgisTable(animalLookupTableUrl, 'Common_Species_Name,Scientific_Species_Name,ELMCODE,ELMCODE9,Life_History_Summary', '1000'),
+  ])
+
+  const byCode = new Map<string, { description: string; source: string }>()
+  const byScientificName = new Map<string, { description: string; source: string }>()
+
+  plantFeatures.forEach((feature) => {
+    const attributes = feature.attributes
+    const description = joinSentences([
+      String(attributes.Plant_PTO_Description ?? ''),
+      !attributes.Plant_PTO_Description && attributes.Habitat ? `Habitat: ${attributes.Habitat}` : '',
+      !attributes.Plant_PTO_Description && attributes.Microhabitat ? `Microhabitat: ${attributes.Microhabitat}` : '',
+      !attributes.Plant_PTO_Description && attributes.MicrohabitatDetails ? `Microhabitat details: ${attributes.MicrohabitatDetails}` : '',
+    ])
+    if (!description) return
+
+    const value = { description, source: 'Plant lookup table' }
+    const elmCode10 = normalizeLookupKey(attributes.ELMCODE10)
+    const elementCode = normalizeLookupKey(attributes.ElementCode)
+    const scientificName = normalizeLookupKey(attributes.ScientificName)
+    if (elmCode10) byCode.set(elmCode10, value)
+    if (elementCode) byCode.set(elementCode, value)
+    if (scientificName) byScientificName.set(scientificName, value)
+  })
+
+  animalFeatures.forEach((feature) => {
+    const attributes = feature.attributes
+    const description = String(attributes.Life_History_Summary ?? '').trim()
+    if (!description) return
+
+    const value = { description, source: 'CWHR life-history table' }
+    const elmCode = normalizeLookupKey(attributes.ELMCODE)
+    const elmCode9 = normalizeLookupKey(attributes.ELMCODE9)
+    const scientificName = normalizeLookupKey(attributes.Scientific_Species_Name)
+    if (elmCode) byCode.set(elmCode, value)
+    if (elmCode9) byCode.set(elmCode9, value)
+    if (scientificName) byScientificName.set(scientificName, value)
+  })
+
+  return { byCode, byScientificName }
 }
 
 function App() {
@@ -178,28 +252,43 @@ function App() {
 
     async function loadStatsTable() {
       setStatsStatus('loading')
-      setStatsMessage('Loading SDGE Suncrest CNDDB stats...')
+      setStatsMessage('Loading SDGE Suncrest CNDDB stats and species library descriptions...')
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
       query.searchParams.set('f', 'json')
 
       try {
-        const response = await fetch(query.toString())
-        if (!response.ok) throw new Error(`Stats table request failed: ${response.status}`)
-        const data = await response.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
+        const [statsResponse, libraryDescriptions] = await Promise.all([
+          fetch(query.toString()),
+          loadLibraryDescriptions(),
+        ])
+        if (!statsResponse.ok) throw new Error(`Stats table request failed: ${statsResponse.status}`)
+        const data = await statsResponse.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
         if (data.error) throw new Error(data.error.message ?? 'Stats table returned an ArcGIS error.')
 
         const rows = (data.features ?? []).map((feature) => {
           const attributes = feature.attributes
           const taxonGroup = String(attributes.TAXONGROUP ?? 'Unknown')
           const elementType = String(attributes.ELMTYPE_DESC ?? '')
+          const elmCode = String(attributes.ELMCODE ?? '')
+          const codeKeys = [
+            normalizeLookupKey(elmCode),
+            shortenElmCode(elmCode, 10),
+            shortenElmCode(elmCode, 9),
+          ].filter(Boolean)
+          const libraryMatch = codeKeys
+            .map((key) => libraryDescriptions.byCode.get(key))
+            .find(Boolean)
+            ?? libraryDescriptions.byScientificName.get(normalizeLookupKey(attributes.SNAME))
+
           return {
             objectId: Number(attributes.ObjectId),
+            elmCode,
             rating: normalizeRating(attributes.PTO_Review),
             common: String(attributes.CNAME ?? 'Unknown common name'),
             scientific: String(attributes.SNAME ?? 'Unknown scientific name'),
@@ -213,6 +302,8 @@ function App() {
             currentCount: asNumber(attributes.Sum_Current_30yr),
             recentCount: asNumber(attributes.Sum_Recent_EO),
             habitatSummary: String(attributes.PTO_Caption_1 ?? attributes.CWHR_Summary ?? attributes.Habitats ?? ''),
+            libraryDescription: libraryMatch?.description ?? '',
+            libraryDescriptionSource: libraryMatch?.source ?? 'Joined result table',
             generalHabitat: String(attributes.GeneralHabitat ?? ''),
             microHabitat: String(attributes.MicroHabitat ?? ''),
             suitabilityReview: String(attributes.Suitability_Review ?? ''),
@@ -556,6 +647,7 @@ function App() {
               </section>
               <section className="source-summary-card">
                 <h3>Species Library Description</h3>
+                <small>{selectedSpecies?.libraryDescriptionSource ?? 'Lookup source'}</small>
                 <p>{speciesLibraryDescription}</p>
               </section>
               <section className="source-summary-card model-summary-card">
