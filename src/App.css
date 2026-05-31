@@ -288,6 +288,43 @@ input {
 .marker-b { left: 43%; }
 .marker-c { right: 8px; }
 
+.criteria-label {
+  margin: 0 0 8px;
+  color: #4f6070;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.criteria-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.criteria-card {
+  display: flex;
+  min-height: 92px;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid #dbe5ee;
+  border-radius: 6px;
+  background: #f8fbfc;
+  padding: 10px;
+}
+
+.criteria-card strong {
+  color: #24313d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.criteria-card span {
+  color: #667684;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .estimate-grid {
   display: grid;
   grid-template-columns: 1fr auto;

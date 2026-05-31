@@ -11,7 +11,6 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Upload,
 } from 'lucide-react'
 import './App.css'
@@ -622,17 +621,12 @@ function App() {
             <div className="section-heading">
               <span className="step-index">2</span>
               <div>
-                <h2>PTO Rules</h2>
-                <p>Standard distance, accuracy, and recency criteria.</p>
+                <h2>PTO Criteria</h2>
+                <p>Current distance, accuracy, recency, and habitat evidence.</p>
               </div>
             </div>
-            <div className="segmented-control" aria-label="Rule preset">
-              <button type="button">Conservative</button>
-              <button className="selected" type="button">Standard</button>
-              <button type="button">Screening</button>
-            </div>
             <label className="slider-field">
-              Buffer distance
+              Analysis buffer
               <div className="slider-row">
                 <input type="range" min="1" max="10" value="5" readOnly />
                 <strong>5 mi</strong>
@@ -646,11 +640,27 @@ function App() {
               <span className="marker marker-b">1.0</span>
               <span className="marker marker-c">5.0</span>
             </div>
-            <button className="plain-row" type="button">
-              <SlidersHorizontal size={17} />
-              Advanced criteria
-              <ChevronRight size={17} />
-            </button>
+            <div className="criteria-label">Advanced criteria</div>
+            <div className="criteria-grid" aria-label="Advanced PTO criteria">
+              <div className="criteria-card">
+                <strong>Distance</strong>
+                <span>High: intersects or &lt;= 0.25 mi</span>
+                <span>Moderate: 0.25 to 1 mi</span>
+                <span>Low: 1 to 5 mi</span>
+              </div>
+              <div className="criteria-card">
+                <strong>Record status</strong>
+                <span>Separates current, recent, historical, unknown, and extirpated records.</span>
+              </div>
+              <div className="criteria-card">
+                <strong>Accuracy</strong>
+                <span>Uses CNDDB accuracy class when explaining confidence in the rating.</span>
+              </div>
+              <div className="criteria-card">
+                <strong>Habitat evidence</strong>
+                <span>Shows suitability review and lookup-table species habitat text when available.</span>
+              </div>
+            </div>
           </div>
 
           <div className="panel-section estimate-section">
