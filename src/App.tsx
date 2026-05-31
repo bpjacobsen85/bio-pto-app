@@ -40,6 +40,12 @@ type SpeciesResult = {
   generalHabitat: string
   microHabitat: string
   suitabilityReview: string
+  family: string
+  lifeform: string
+  bloomingPeriod: string
+  elevationLowFt: number | null
+  elevationHighFt: number | null
+  references: string
 }
 
 type SpeciesReviewEdit = {
@@ -82,6 +88,12 @@ function formatMiles(value: number | null) {
 
 function formatCount(value: number | null) {
   return value === null ? '--' : value.toLocaleString()
+}
+
+function formatElevation(low: number | null, high: number | null) {
+  if (low === null && high === null) return '--'
+  if (low !== null && high !== null) return `${low.toLocaleString()} - ${high.toLocaleString()} ft`
+  return `${(low ?? high)?.toLocaleString()} ft`
 }
 
 function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
@@ -144,7 +156,7 @@ function App() {
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -178,6 +190,12 @@ function App() {
             generalHabitat: String(attributes.GeneralHabitat ?? ''),
             microHabitat: String(attributes.MicroHabitat ?? ''),
             suitabilityReview: String(attributes.Suitability_Review ?? ''),
+            family: String(attributes.Family ?? ''),
+            lifeform: String(attributes.Lifeform ?? ''),
+            bloomingPeriod: String(attributes.BloomingPeriod ?? ''),
+            elevationLowFt: asNumber(attributes.ElevationLow_ft),
+            elevationHighFt: asNumber(attributes.ElevationHigh_ft),
+            references: String(attributes.References ?? ''),
           }
         })
 
@@ -476,6 +494,24 @@ function App() {
             <p className="reason-text">
               Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.
             </p>
+            {selectedSpecies?.speciesType === 'Plants' && (
+              <div className="plant-facts">
+                <h3>Plant Details</h3>
+                <div className="plant-fact-grid">
+                  <span>Family <strong>{selectedSpecies.family || '--'}</strong></span>
+                  <span>Lifeform <strong>{selectedSpecies.lifeform || '--'}</strong></span>
+                  <span>Blooming period <strong>{selectedSpecies.bloomingPeriod || '--'}</strong></span>
+                  <span>Elevation <strong>{formatElevation(selectedSpecies.elevationLowFt, selectedSpecies.elevationHighFt)}</strong></span>
+                </div>
+                {(selectedSpecies.generalHabitat || selectedSpecies.microHabitat || selectedSpecies.references) && (
+                  <div className="plant-notes">
+                    {selectedSpecies.generalHabitat && <p><strong>General habitat:</strong> {selectedSpecies.generalHabitat}</p>}
+                    {selectedSpecies.microHabitat && <p><strong>Microhabitat:</strong> {selectedSpecies.microHabitat}</p>}
+                    {selectedSpecies.references && <p><strong>References:</strong> {selectedSpecies.references}</p>}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="review-grid">
               <label className="review-field">
                 Reviewed potential
@@ -521,6 +557,7 @@ function App() {
 }
 
 export default App
+
 
 
 

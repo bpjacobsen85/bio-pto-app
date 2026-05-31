@@ -570,6 +570,54 @@ input {
   background: #f7fafc;
 }
 
+.plant-facts {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #dce8d8;
+  border-radius: 8px;
+  background: #f7fbf4;
+}
+
+.plant-facts h3 {
+  margin: 0;
+  color: #263542;
+  font-size: 13px;
+}
+
+.plant-fact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.plant-fact-grid span {
+  padding: 9px;
+  border-radius: 6px;
+  background: #fff;
+  color: #5f6f5d;
+  font-size: 12px;
+}
+
+.plant-fact-grid strong {
+  display: block;
+  margin-top: 2px;
+  color: #17202a;
+}
+
+.plant-notes {
+  display: grid;
+  gap: 6px;
+  color: #4f5e4e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.plant-notes p {
+  margin: 0;
+}
+
 .table-card,
 .detail-panel {
   background: #fff;
@@ -877,6 +925,7 @@ input {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
