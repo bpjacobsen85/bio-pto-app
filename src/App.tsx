@@ -73,9 +73,10 @@ type PtoCriteria = {
   lowDistance: number
 }
 
-const defaultProjectLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_SM_Project_Components/FeatureServer/2'
-const defaultCnddbLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
-const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
+const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/Test_Tool_Input/FeatureServer/0'
+const defaultCnddbLayerUrl = import.meta.env.VITE_TEST_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
+const defaultStatsTableUrl = import.meta.env.VITE_TEST_SUMMARY_TABLE_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
+const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
 const animalLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/4'
 const ratingOrder: Rating[] = ['High', 'Moderate', 'Low', 'No Potential', 'Needs Review']
@@ -350,7 +351,7 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [activeMapTool, setActiveMapTool] = useState<MapTool>('layers')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
-  const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState('')
+  const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [statsTableUrl] = useState(defaultStatsTableUrl)
   const [cnddbLayerUrl] = useState(defaultCnddbLayerUrl)
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
@@ -693,7 +694,7 @@ function App() {
             <div className="field-grid two-col">
               <label>
                 Project name
-                <input value="SDGE_Suncrest" readOnly />
+                <input value="BIO_PTO_Test" readOnly />
               </label>
               <label>
                 Features
@@ -773,8 +774,10 @@ function App() {
             <div className="estimate-grid">
               <span>Species rows</span>
               <strong>{totalSpecies.toLocaleString()}</strong>
-              <span>CNDDB records</span>
-              <strong>{totalOccurrences.toLocaleString()}</strong>
+                <span>CNDDB records</span>
+                <strong>{totalOccurrences.toLocaleString()}</strong>
+              <span>Full CNDDB</span>
+              <strong>{defaultFullCnddbLayerUrl ? 'Public' : 'Unset'}</strong>
               <span>Status</span>
               <strong>{statsStatus}</strong>
             </div>

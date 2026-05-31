@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:notebooks": "python notebook-tests/validate_notebooks.py",
+    "check:services": "python notebook-tests/check_public_test_services.py"
   },
   "dependencies": {
     "@arcgis/core": "^5.0.19",
