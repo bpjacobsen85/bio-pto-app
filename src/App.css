@@ -274,7 +274,7 @@ input {
 
 .high-zone { background: #d64545; }
 .moderate-zone { background: #e59f2a; }
-.low-zone { background: #3b82b6; }
+.low-zone { background: #2f8f5b; }
 
 .marker {
   position: absolute;
@@ -411,7 +411,7 @@ input {
 .occ-high { background: #d64545; left: 38%; top: 38%; }
 .occ-high.second { left: 52%; top: 32%; }
 .occ-moderate { background: #e59f2a; left: 62%; top: 52%; }
-.occ-low { background: #3b82b6; left: 30%; top: 61%; }
+.occ-low { background: #2f8f5b; left: 30%; top: 61%; }
 .occ-review { background: #7c5cc4; left: 68%; top: 24%; }
 .occ-none { background: #8a94a6; left: 45%; top: 72%; }
 
@@ -508,7 +508,7 @@ input {
 
 .high { color: #d64545; }
 .moderate { color: #e59f2a; }
-.low { color: #3b82b6; }
+.low { color: #2f8f5b; }
 .no-potential { color: #8a94a6; }
 .needs-review { color: #7c5cc4; }
 
@@ -823,7 +823,7 @@ input {
 
 .rating-pill.high { background: #d64545; }
 .rating-pill.moderate { background: #e59f2a; }
-.rating-pill.low { background: #3b82b6; }
+.rating-pill.low { background: #2f8f5b; }
 .rating-pill.no-potential { background: #8a94a6; }
 .rating-pill.needs-review { background: #7c5cc4; }
 
