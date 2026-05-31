@@ -801,6 +801,23 @@ function App() {
                 ))}
               </div>
             </div>
+            <div className="selected-species-card">
+              <div className="selected-species-heading">
+                {selectedSpecies ? <RatingPill rating={selectedPotential} /> : <RatingPill rating="Needs Review" />}
+                <div>
+                  <h3>{selectedSpecies?.common ?? 'Select a species'}</h3>
+                  <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : 'Click a row below to review model evidence.'}</p>
+                </div>
+              </div>
+              <div className="selected-species-metrics">
+                <span>Distance <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
+                <span>Accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
+                <span>Records <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
+              </div>
+              <ul>
+                {getPtoReasonBullets(selectedSpecies).slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            </div>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
                 <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
