@@ -21,6 +21,7 @@ import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'search' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
+type ListingFilter = 'All' | string
 
 type SpeciesResult = {
   objectId: number
@@ -30,6 +31,7 @@ type SpeciesResult = {
   scientific: string
   taxonGroup: string
   elementType: string
+  listings: string
   speciesType: Exclude<SpeciesTypeFilter, 'All'>
   distanceMiles: number | null
   accuracyClass: number | null
@@ -99,6 +101,17 @@ function formatElevation(low: number | null, high: number | null) {
   if (low === null && high === null) return '--'
   if (low !== null && high !== null) return `${low.toLocaleString()} - ${high.toLocaleString()} ft`
   return `${(low ?? high)?.toLocaleString()} ft`
+}
+
+function formatListing(value: string) {
+  return value.trim() || 'No listing shown'
+}
+
+function getListingCodes(value: string) {
+  return value
+    .split(';')
+    .map((code) => code.trim())
+    .filter(Boolean)
 }
 
 function joinSentences(parts: Array<string | undefined>) {
@@ -219,6 +232,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
+  const [listingFilter, setListingFilter] = useState<ListingFilter>('All')
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
@@ -256,7 +270,7 @@ function App() {
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,Listings,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -294,6 +308,7 @@ function App() {
             scientific: String(attributes.SNAME ?? 'Unknown scientific name'),
             taxonGroup,
             elementType,
+            listings: String(attributes.Listings ?? ''),
             speciesType: getSpeciesType(taxonGroup, elementType),
             distanceMiles: asNumber(attributes.Min_NEAR_DIST_Miles),
             accuracyClass: asNumber(attributes.Min_Accuracy_Class),
@@ -335,9 +350,15 @@ function App() {
     }
   }, [statsTableUrl])
 
+  const listingOptions = useMemo(() => Array.from(new Set(
+    speciesResults
+      .flatMap((row) => getListingCodes(row.listings))
+  )).sort((a, b) => a.localeCompare(b)), [speciesResults])
+
   const filteredSpeciesResults = useMemo(() => speciesResults.filter((row) => (
-    speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter
-  )), [speciesResults, speciesTypeFilter])
+    (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
+    && (listingFilter === 'All' || getListingCodes(row.listings).includes(listingFilter))
+  )), [listingFilter, speciesResults, speciesTypeFilter])
 
   const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
     label,
@@ -583,6 +604,13 @@ function App() {
                 </button>
               ))}
             </div>
+            <label className="listing-filter">
+              Listing status
+              <select value={listingFilter} onChange={(event) => setListingFilter(event.target.value)}>
+                <option value="All">All listing codes</option>
+                {listingOptions.map((listing) => <option value={listing} key={listing}>{listing}</option>)}
+              </select>
+            </label>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
                 <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
@@ -590,7 +618,7 @@ function App() {
                   <span className="species-name">
                     <strong>{row.common}</strong>
                     <em>{row.scientific}</em>
-                    <small>{row.taxonGroup || row.speciesType}</small>
+                    <small>{row.taxonGroup || row.speciesType} · {formatListing(row.listings)}</small>
                   </span>
                   <span>{formatMiles(row.distanceMiles)}</span>
                 </button>
@@ -609,6 +637,7 @@ function App() {
               <span>Accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
               <span>Occurrences <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
               <span>Extant records <strong>{formatCount(selectedSpecies?.extantCount ?? null)}</strong></span>
+              <span>Listing status <strong>{selectedSpecies ? formatListing(selectedSpecies.listings) : '--'}</strong></span>
             </div>
             <p className="reason-text">
               Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.

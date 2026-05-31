@@ -715,13 +715,35 @@ input {
   padding: 0;
 }
 
+.listing-filter {
+  display: grid;
+  gap: 6px;
+  padding: 0 12px 12px;
+  color: #5c6b79;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.listing-filter select {
+  min-height: 34px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid #d4dde7;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .species-list {
   display: grid;
 }
 
 .species-row {
   display: grid;
-  grid-template-columns: 92px 1fr 58px;
+  grid-template-columns: 92px minmax(0, 1fr) 58px;
   align-items: center;
   gap: 8px;
   min-height: 66px;
