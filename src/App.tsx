@@ -39,6 +39,11 @@ type SpeciesResult = {
   extantCount: number | null
   currentCount: number | null
   recentCount: number | null
+  historicalCount: number | null
+  possiblyExtirpatedCount: number | null
+  extirpatedCount: number | null
+  unknownCount: number | null
+  minYear: number | null
   habitatSummary: string
   libraryDescription: string
   libraryDescriptionSource: string
@@ -134,6 +139,10 @@ function formatElevation(low: number | null, high: number | null) {
   return `${(low ?? high)?.toLocaleString()} ft`
 }
 
+function formatYear(value: number | null) {
+  return value === null ? '--' : String(value)
+}
+
 function getListingCodes(value: string) {
   return value
     .split(';')
@@ -213,6 +222,30 @@ function buildFinalReportDescription(species?: SpeciesResult) {
     buildSpeciesLibraryDescription(species),
     species.habitatSummary,
   ])
+}
+
+function getPtoReasonBullets(species?: SpeciesResult) {
+  if (!species) return []
+
+  const distanceText = species.distanceMiles === 0
+    ? 'Occurrence intersects the project area.'
+    : species.distanceMiles !== null
+      ? `Nearest occurrence is ${formatMiles(species.distanceMiles)} from the project.`
+      : 'Nearest occurrence distance is not available.'
+  const accuracyText = species.accuracyClass !== null
+    ? `Best mapped occurrence accuracy is Class ${species.accuracyClass}.`
+    : 'Occurrence accuracy class is not available.'
+  const recordText = `${formatCount(species.frequency)} occurrence records; ${formatCount(species.extantCount)} extant, ${formatCount(species.currentCount)} current, ${formatCount(species.recentCount)} recent.`
+  const statusText = species.extirpatedCount || species.possiblyExtirpatedCount
+    ? `${formatCount(species.extirpatedCount)} extirpated and ${formatCount(species.possiblyExtirpatedCount)} possibly extirpated records are included.`
+    : 'No extirpated records are driving the summary.'
+
+  return [
+    distanceText,
+    accuracyText,
+    recordText,
+    statusText,
+  ]
 }
 
 function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
@@ -336,7 +369,7 @@ function App() {
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,Listings,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,ObjectId')
+      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,Listings,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,Sum_Historical_30yr,Sum_Possibly_Extirpated,Sum_Extirpated,Sum_Unknown_EO,Min_Year,ObjectId')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -382,6 +415,11 @@ function App() {
             extantCount: asNumber(attributes.Sum_Extant),
             currentCount: asNumber(attributes.Sum_Current_30yr),
             recentCount: asNumber(attributes.Sum_Recent_EO),
+            historicalCount: asNumber(attributes.Sum_Historical_30yr),
+            possiblyExtirpatedCount: asNumber(attributes.Sum_Possibly_Extirpated),
+            extirpatedCount: asNumber(attributes.Sum_Extirpated),
+            unknownCount: asNumber(attributes.Sum_Unknown_EO),
+            minYear: asNumber(attributes.Min_Year),
             habitatSummary: String(attributes.PTO_Caption_1 ?? attributes.CWHR_Summary ?? attributes.Habitats ?? ''),
             libraryDescription: libraryMatch?.description ?? '',
             libraryDescriptionSource: libraryMatch?.source ?? 'Joined result table',
@@ -724,16 +762,34 @@ function App() {
               <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
               <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : statsMessage}</p>
             </div>
+            <div className="reason-card">
+              <div>
+                <p className="eyebrow">Why this rating?</p>
+                <h3>{selectedPotential} potential</h3>
+              </div>
+              <ul>
+                {getPtoReasonBullets(selectedSpecies).map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            </div>
             <div className="evidence-list">
-              <span>Nearest occurrence <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
-              <span>Accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
-              <span>Occurrences <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
+              <span>Nearest record <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
+              <span>Location accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
+              <span>Total records <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
               <span>Extant records <strong>{formatCount(selectedSpecies?.extantCount ?? null)}</strong></span>
+              <span>Current ≤30 yr <strong>{formatCount(selectedSpecies?.currentCount ?? null)}</strong></span>
+              <span>Recent EO <strong>{formatCount(selectedSpecies?.recentCount ?? null)}</strong></span>
+              <span>Historical ≤30 yr <strong>{formatCount(selectedSpecies?.historicalCount ?? null)}</strong></span>
+              <span>Possibly extirpated <strong>{formatCount(selectedSpecies?.possiblyExtirpatedCount ?? null)}</strong></span>
+              <span>Extirpated <strong>{formatCount(selectedSpecies?.extirpatedCount ?? null)}</strong></span>
+              <span>Unknown EO <strong>{formatCount(selectedSpecies?.unknownCount ?? null)}</strong></span>
+              <span>Earliest record year <strong>{formatYear(selectedSpecies?.minYear ?? null)}</strong></span>
               <span>Listing status <strong>{selectedSpecies ? getListingCodes(selectedSpecies.listings).map(getListingLabel).join('; ') || 'No listing shown' : '--'}</strong></span>
             </div>
-            <p className="reason-text">
-              Loaded from the ArcGIS Online stats table. PTO review is driven by distance, accuracy, extant/current status, and the notebook rules.
-            </p>
+            {selectedSpecies?.suitabilityReview && (
+              <p className="reason-text">
+                <strong>Habitat suitability:</strong> {selectedSpecies.suitabilityReview}
+              </p>
+            )}
             {selectedSpecies?.speciesType === 'Plants' && (
               <div className="plant-facts">
                 <h3>Plant Details</h3>

@@ -865,6 +865,37 @@ input {
   font-size: 17px;
 }
 
+.reason-card {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #cfe1ee;
+  border-radius: 8px;
+  background: #f0f8fd;
+  box-shadow: inset 4px 0 0 #1b6ca8;
+}
+
+.reason-card .eyebrow {
+  margin: 0 0 3px;
+}
+
+.reason-card h3 {
+  margin: 0;
+  color: #133b5c;
+  font-size: 15px;
+}
+
+.reason-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #263542;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .evidence-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -873,6 +904,7 @@ input {
 }
 
 .evidence-list span {
+  min-width: 0;
   padding: 9px;
   border-radius: 6px;
   background: #f4f7fa;
@@ -884,6 +916,7 @@ input {
   display: block;
   margin-top: 2px;
   color: #17202a;
+  overflow-wrap: anywhere;
 }
 
 .reason-text {
