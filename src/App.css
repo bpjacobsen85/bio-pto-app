@@ -251,6 +251,44 @@ input {
   padding: 0;
 }
 
+.criteria-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.criteria-input-grid label {
+  display: grid;
+  gap: 5px;
+  color: #526372;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.criteria-input-grid input {
+  width: 100%;
+  border: 1px solid #d6dee7;
+  border-radius: 6px;
+  background: #fff;
+  color: #24313d;
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 9px;
+}
+
+.criteria-warning {
+  margin: -2px 0 10px;
+  border: 1px solid #f1c96b;
+  border-radius: 6px;
+  background: #fff7df;
+  color: #7a5a12;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 8px 10px;
+}
+
 .threshold-bar {
   position: relative;
   height: 58px;

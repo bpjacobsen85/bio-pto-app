@@ -62,6 +62,13 @@ type SpeciesReviewEdit = {
   habitatSummary?: string
 }
 
+type PtoCriteria = {
+  bufferDistance: number
+  highDistance: number
+  moderateDistance: number
+  lowDistance: number
+}
+
 const defaultProjectLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_SM_Project_Components/FeatureServer/2'
 const defaultCnddbLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
 const defaultStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
@@ -126,6 +133,10 @@ function asNumber(value: unknown): number | null {
 function formatMiles(value: number | null) {
   if (value === null || Number.isNaN(value)) return '--'
   return `${value.toFixed(value < 1 ? 2 : 1)} mi`
+}
+
+function formatCriteriaMiles(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function formatCount(value: number | null) {
@@ -333,6 +344,12 @@ function App() {
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
+  const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
+    bufferDistance: 5,
+    highDistance: 0.25,
+    moderateDistance: 1,
+    lowDistance: 5,
+  })
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
     featureCount: 0,
@@ -490,6 +507,19 @@ function App() {
   const speciesLibraryDescription = buildSpeciesLibraryDescription(selectedSpecies)
   const automatedPtoSummary = selectedSpecies?.habitatSummary || 'No automated PTO summary was found in the stats table.'
   const selectedHabitatSummary = selectedReview?.habitatSummary ?? buildFinalReportDescription(selectedSpecies)
+  const criteriaValid = (
+    ptoCriteria.highDistance > 0
+    && ptoCriteria.highDistance <= ptoCriteria.moderateDistance
+    && ptoCriteria.moderateDistance <= ptoCriteria.lowDistance
+    && ptoCriteria.lowDistance <= ptoCriteria.bufferDistance
+  )
+  const criteriaDenominator = Math.max(ptoCriteria.lowDistance, 0.01)
+  const highWidth = `${Math.max(8, Math.min(100, (ptoCriteria.highDistance / criteriaDenominator) * 100))}%`
+  const moderateWidth = `${Math.max(10, Math.min(100, ((ptoCriteria.moderateDistance - ptoCriteria.highDistance) / criteriaDenominator) * 100))}%`
+  const lowWidth = `${Math.max(10, Math.min(100, ((ptoCriteria.lowDistance - ptoCriteria.moderateDistance) / criteriaDenominator) * 100))}%`
+  const highDistanceLabel = formatCriteriaMiles(ptoCriteria.highDistance)
+  const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
+  const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
 
   async function handleSignIn() {
     setAuthStatus('signing-in')
@@ -513,6 +543,15 @@ function App() {
 
   function toggleMapTool(tool: Exclude<MapTool, null>) {
     setActiveMapTool((current) => current === tool ? null : tool)
+  }
+
+  function updatePtoCriteria(key: keyof PtoCriteria, value: string) {
+    const next = Number(value)
+    if (!Number.isFinite(next)) return
+    setPtoCriteria((current) => ({
+      ...current,
+      [key]: next,
+    }))
   }
 
   function handleLoadProjectLayer() {
@@ -625,28 +664,42 @@ function App() {
                 <p>Current distance, accuracy, recency, and habitat evidence.</p>
               </div>
             </div>
-            <label className="slider-field">
-              Analysis buffer
-              <div className="slider-row">
-                <input type="range" min="1" max="10" value="5" readOnly />
-                <strong>5 mi</strong>
-              </div>
-            </label>
-            <div className="threshold-bar" aria-label="Distance thresholds">
+            <div className="criteria-input-grid">
+              <label>
+                Buffer
+                <input type="number" min="0.25" step="0.25" value={ptoCriteria.bufferDistance} onChange={(event) => updatePtoCriteria('bufferDistance', event.target.value)} />
+              </label>
+              <label>
+                High
+                <input type="number" min="0.01" step="0.05" value={ptoCriteria.highDistance} onChange={(event) => updatePtoCriteria('highDistance', event.target.value)} />
+              </label>
+              <label>
+                Moderate
+                <input type="number" min="0.01" step="0.05" value={ptoCriteria.moderateDistance} onChange={(event) => updatePtoCriteria('moderateDistance', event.target.value)} />
+              </label>
+              <label>
+                Low
+                <input type="number" min="0.01" step="0.25" value={ptoCriteria.lowDistance} onChange={(event) => updatePtoCriteria('lowDistance', event.target.value)} />
+              </label>
+            </div>
+            {!criteriaValid && (
+              <div className="criteria-warning">Distances must increase from High to Moderate to Low, and Low cannot exceed Buffer.</div>
+            )}
+            <div className="threshold-bar" aria-label="Distance thresholds" style={{ gridTemplateColumns: `${highWidth} ${moderateWidth} ${lowWidth}` }}>
               <span className="zone high-zone">High</span>
               <span className="zone moderate-zone">Moderate</span>
               <span className="zone low-zone">Low</span>
-              <span className="marker marker-a">0.25</span>
-              <span className="marker marker-b">1.0</span>
-              <span className="marker marker-c">5.0</span>
+              <span className="marker marker-a">{highDistanceLabel}</span>
+              <span className="marker marker-b">{moderateDistanceLabel}</span>
+              <span className="marker marker-c">{lowDistanceLabel}</span>
             </div>
             <div className="criteria-label">Advanced criteria</div>
             <div className="criteria-grid" aria-label="Advanced PTO criteria">
               <div className="criteria-card">
                 <strong>Distance</strong>
-                <span>High: intersects or &lt;= 0.25 mi</span>
-                <span>Moderate: 0.25 to 1 mi</span>
-                <span>Low: 1 to 5 mi</span>
+                <span>High: intersects or &lt;= {highDistanceLabel} mi</span>
+                <span>Moderate: {highDistanceLabel} to {moderateDistanceLabel} mi</span>
+                <span>Low: {moderateDistanceLabel} to {lowDistanceLabel} mi</span>
               </div>
               <div className="criteria-card">
                 <strong>Record status</strong>
