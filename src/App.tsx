@@ -96,6 +96,32 @@ function formatElevation(low: number | null, high: number | null) {
   return `${(low ?? high)?.toLocaleString()} ft`
 }
 
+function joinSentences(parts: Array<string | undefined>) {
+  return parts
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+function buildSpeciesLibraryDescription(species?: SpeciesResult) {
+  if (!species) return ''
+
+  const habitatText = joinSentences([
+    species.generalHabitat && `General habitat: ${species.generalHabitat}`,
+    species.microHabitat && `Microhabitat: ${species.microHabitat}`,
+  ])
+
+  return habitatText || species.suitabilityReview || 'No species library description was found in the joined result table.'
+}
+
+function buildFinalReportDescription(species?: SpeciesResult) {
+  if (!species) return ''
+  return joinSentences([
+    buildSpeciesLibraryDescription(species),
+    species.habitatSummary,
+  ])
+}
+
 function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
   const group = taxonGroup.toLowerCase()
   const plantGroups = ['dicot', 'monocot', 'fern', 'gymnosperm', 'conifer', 'moss', 'lichen', 'bryophyte']
@@ -234,7 +260,9 @@ function App() {
   const animalCount = speciesResults.filter((row) => row.speciesType === 'Animals').length
   const selectedReview = selectedSpecies ? reviewEdits[selectedSpecies.objectId] : undefined
   const selectedPotential = selectedReview?.rating ?? selectedSpecies?.rating ?? 'Needs Review'
-  const selectedHabitatSummary = selectedReview?.habitatSummary ?? selectedSpecies?.habitatSummary ?? ''
+  const speciesLibraryDescription = buildSpeciesLibraryDescription(selectedSpecies)
+  const automatedPtoSummary = selectedSpecies?.habitatSummary || 'No automated PTO summary was found in the stats table.'
+  const selectedHabitatSummary = selectedReview?.habitatSummary ?? buildFinalReportDescription(selectedSpecies)
 
   async function handleSignIn() {
     setAuthStatus('signing-in')
@@ -527,8 +555,12 @@ function App() {
                 <textarea aria-label="Final report description" value={selectedHabitatSummary} onChange={(event) => updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
               </section>
               <section className="source-summary-card">
-                <h3>Model-Generated Report Summary</h3>
-                <p>{selectedSpecies?.habitatSummary || selectedSpecies?.generalHabitat || 'No current description was found in the stats table.'}</p>
+                <h3>Species Library Description</h3>
+                <p>{speciesLibraryDescription}</p>
+              </section>
+              <section className="source-summary-card model-summary-card">
+                <h3>Automated PTO Summary</h3>
+                <p>{automatedPtoSummary}</p>
               </section>
             </div>
           </div>

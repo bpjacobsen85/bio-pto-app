@@ -614,6 +614,11 @@ input {
   background: #f7fafc;
 }
 
+.model-summary-card {
+  border-color: #ead9b9;
+  background: #fffaf0;
+}
+
 .source-summary-card h3 {
   margin: 0;
   color: #5c6b79;
