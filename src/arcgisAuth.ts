@@ -21,6 +21,7 @@ function configureOAuth() {
       appId,
       portalUrl,
       popup: true,
+      popupCallbackUrl: `${window.location.origin}/oauth-callback.html`,
     }),
   ])
 
@@ -70,5 +71,7 @@ export async function restoreArcGISSession(): Promise<ArcgisUser | null> {
 export function signOutOfArcGIS() {
   IdentityManager.destroyCredentials()
 }
+
+
 
 
