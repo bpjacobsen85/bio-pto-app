@@ -233,6 +233,25 @@ function addTokenToUrl(url: string, token: string) {
   }
 }
 
+function normalizeReportDownloadUrl(url: string) {
+  if (!url.trim()) return ''
+  try {
+    const nextUrl = new URL(url)
+    const itemIdFromHomePage = nextUrl.pathname.endsWith('/home/item.html') ? nextUrl.searchParams.get('id') : ''
+    if (itemIdFromHomePage) {
+      return `${nextUrl.origin}/sharing/rest/content/items/${itemIdFromHomePage}/data`
+    }
+
+    const itemMatch = nextUrl.pathname.match(/\/sharing\/rest\/content\/items\/([^/]+)$/i)
+    if (itemMatch) {
+      return `${nextUrl.origin}${nextUrl.pathname}/data`
+    }
+  } catch {
+    // Leave non-URL strings untouched; later validation will surface any issue.
+  }
+  return url
+}
+
 function stringifyOutput(value: unknown) {
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2) ?? ''
@@ -245,10 +264,10 @@ function reportOutputLink(output: unknown) {
 
   if (typeof value === 'string') {
     const trimmed = value.trim().replace(/^"|"$/g, '')
-    if (trimmed.startsWith('http')) return trimmed
+    if (trimmed.startsWith('http')) return normalizeReportDownloadUrl(trimmed)
     try {
       const parsed = JSON.parse(trimmed) as { itemId?: string; id?: string; url?: string }
-      if (parsed.url) return parsed.url
+      if (parsed.url) return normalizeReportDownloadUrl(parsed.url)
       const itemId = parsed.itemId ?? parsed.id
       if (itemId) return `${arcgisPortalUrl}/sharing/rest/content/items/${itemId}/data`
     } catch {
@@ -1103,19 +1122,43 @@ function App() {
     }
   }
 
-  async function handleOpenReportLink(url: string) {
+  async function handleOpenReportLink(url: string, fileName: string) {
     if (!url) return
-    const reportWindow = window.open('', '_blank')
     try {
       const token = await getArcGISToken()
-      const signedUrl = addTokenToUrl(url, token)
-      if (reportWindow) {
-        reportWindow.location.href = signedUrl
-      } else {
-        window.open(signedUrl, '_blank', 'noopener,noreferrer')
+      const signedUrl = addTokenToUrl(normalizeReportDownloadUrl(url), token)
+      setReportMessage(`Downloading ${fileName}...`)
+
+      try {
+        const response = await fetch(signedUrl)
+        if (!response.ok) throw new Error(`ArcGIS download request failed (${response.status}).`)
+        const contentType = response.headers.get('content-type') ?? ''
+        if (contentType.includes('application/json')) {
+          const data = await response.json() as { error?: { message?: string; details?: string[] } }
+          throw new Error([data.error?.message, ...(data.error?.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS returned JSON instead of the Word document.')
+        }
+
+        const blob = await response.blob()
+        const objectUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000)
+      } catch {
+        const link = document.createElement('a')
+        link.href = signedUrl
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
       }
+      setReportStatus('ready')
+      setReportMessage('Report package ready.')
     } catch (error) {
-      if (reportWindow) reportWindow.close()
       setReportStatus('error')
       setReportMessage(error instanceof Error ? error.message : 'Could not open report document.')
     }
@@ -1439,13 +1482,13 @@ function App() {
               {reportStatus === 'ready' && (reportLinks.animals || reportLinks.plants) && (
                 <div className="header-report-links" aria-label="Generated report downloads">
                   {reportLinks.animals && (
-                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.animals)}>
+                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
                       <FileText size={15} />
                       Animals PTO
                     </button>
                   )}
                   {reportLinks.plants && (
-                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.plants)}>
+                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
                       <FileText size={15} />
                       Plants PTO
                     </button>
@@ -1493,11 +1536,11 @@ function App() {
             {reportMessage && <span className={`report-message ${reportStatus === 'error' ? 'error' : ''}`}>{reportMessage}</span>}
             {reportStatus === 'ready' && (
               <div className="report-download-cards">
-                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.animals)}>
+                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
                   <FileText size={20} />
                   <span><strong>Animals PTO</strong><small>Word document</small></span>
                 </button>
-                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.plants)}>
+                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
                   <FileText size={20} />
                   <span><strong>Plants PTO</strong><small>Word document</small></span>
                 </button>
