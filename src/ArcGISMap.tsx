@@ -194,6 +194,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       })
       : null
     const userAddedFeatureLayers = mapAddedLayers.map((layer) => new FeatureLayer({
+      id: `map-added-${layer.id}`,
       url: layer.url,
       title: layer.title,
       outFields: ['*'],
@@ -285,18 +286,39 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       container: layerListContainer,
       listItemCreatedFunction: (event) => {
         const layer = event.item.layer as FeatureLayer | undefined
-        const removableLayer = mapAddedLayers.find((candidate) => candidate.url === layer?.url)
-        if (!removableLayer) return
+        const addedLayer = mapAddedLayers.find((candidate) => `map-added-${candidate.id}` === layer?.id)
+        if (!addedLayer) return
         event.item.actionsSections = [[{
+          type: 'button',
+          title: 'Zoom to',
+          className: 'esri-icon-zoom-in-magnifying-glass',
+          id: `zoom-${addedLayer.id}`,
+        }, {
           type: 'button',
           title: 'Remove layer',
           className: 'esri-icon-trash',
-          id: `remove-${removableLayer.id}`,
+          id: `remove-${addedLayer.id}`,
         }]]
       },
     })
 
-    layerList.on('trigger-action', (event) => {
+    layerList.on('trigger-action', async (event) => {
+      const actionId = String(event.action.id)
+      if (actionId.startsWith('zoom-')) {
+        const layer = event.item.layer as FeatureLayer | undefined
+        if (!layer) return
+        try {
+          await layer.load()
+          const extentResult = await layer.queryExtent()
+          const targetExtent = extentResult.extent ?? layer.fullExtent
+          if (targetExtent) {
+            await view.goTo(targetExtent.expand(1.2), { duration: 650 })
+          }
+        } catch {
+          // Keep the layer available even if a service does not allow extent queries.
+        }
+        return
+      }
       const match = String(event.action.id).match(/^remove-(.+)$/)
       if (match) onRemoveMapLayer?.(match[1])
     })
