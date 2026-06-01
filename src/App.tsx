@@ -76,11 +76,20 @@ type PtoCriteria = {
   lowDistance: number
 }
 
+type PortalLayerItem = {
+  id: string
+  title: string
+  owner: string
+  modified?: number
+  url?: string
+}
+
 const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || ''
 const defaultCnddbLayerUrl = ''
 const defaultStatsTableUrl = ''
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
 const defaultWebMapId = import.meta.env.VITE_DEFAULT_WEBMAP_ID || ''
+const arcgisPortalUrl = import.meta.env.VITE_ARCGIS_PORTAL_URL || 'https://www.arcgis.com'
 const runModelToolUrl = import.meta.env.VITE_RUN_MODEL_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/1714398fc38148488ee82a2a6c698c82/GPServer'
 const generateReportToolUrl = import.meta.env.VITE_REPORT_NOTEBOOK_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/29e2ba5e56fb42faba0f2e9d9ba06b4a/GPServer'
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
@@ -128,25 +137,6 @@ type SavedAnalysisRun = {
   bufferLayerUrl: string
   approxCreditsUsed: string
   completedAt: string
-}
-
-function readSavedAnalysisRun(): SavedAnalysisRun | null {
-  try {
-    const raw = window.localStorage.getItem(savedAnalysisRunKey)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<SavedAnalysisRun>
-    if (!parsed.summaryTableUrl) return null
-    return {
-      projectName: parsed.projectName || 'BIO_PTO_Project',
-      summaryTableUrl: featureLayerZeroUrl(parsed.summaryTableUrl),
-      cnddbLayerUrl: parsed.cnddbLayerUrl ? featureLayerZeroUrl(parsed.cnddbLayerUrl) : defaultCnddbLayerUrl,
-      bufferLayerUrl: parsed.bufferLayerUrl || '',
-      approxCreditsUsed: parsed.approxCreditsUsed || '0',
-      completedAt: parsed.completedAt || new Date().toISOString(),
-    }
-  } catch {
-    return null
-  }
 }
 
 function saveAnalysisRun(run: SavedAnalysisRun) {
@@ -401,34 +391,37 @@ async function loadLibraryDescriptions() {
 }
 
 function App() {
-  const savedAnalysisRun = useMemo(() => readSavedAnalysisRun(), [])
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
   const [activeMapTool, setActiveMapTool] = useState<MapTool>(null)
-  const [projectName, setProjectName] = useState(savedAnalysisRun?.projectName ?? 'BIO_PTO_Test')
+  const [projectName, setProjectName] = useState('')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
-  const [statsTableUrl, setStatsTableUrl] = useState(savedAnalysisRun?.summaryTableUrl ?? defaultStatsTableUrl)
-  const [cnddbLayerUrl, setCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? defaultCnddbLayerUrl)
-  const [existingSummaryTableUrl, setExistingSummaryTableUrl] = useState(savedAnalysisRun?.summaryTableUrl ?? '')
-  const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? '')
-  const [bufferLayerUrl, setBufferLayerUrl] = useState(savedAnalysisRun?.bufferLayerUrl ?? '')
+  const [statsTableUrl, setStatsTableUrl] = useState(defaultStatsTableUrl)
+  const [cnddbLayerUrl, setCnddbLayerUrl] = useState(defaultCnddbLayerUrl)
+  const [existingSummaryTableUrl, setExistingSummaryTableUrl] = useState('')
+  const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState('')
+  const [bufferLayerUrl, setBufferLayerUrl] = useState('')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
-  const [statsStatus, setStatsStatus] = useState<StatsStatus>(savedAnalysisRun ? 'loading' : 'idle')
-  const [statsMessage, setStatsMessage] = useState(savedAnalysisRun ? 'Loading saved notebook summary table...' : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
-  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(savedAnalysisRun ? 'ready' : 'idle')
-  const [analysisMessage, setAnalysisMessage] = useState(savedAnalysisRun ? `Loaded saved notebook output from ${new Date(savedAnalysisRun.completedAt).toLocaleString()}.` : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
-  const [approxCreditsUsed, setApproxCreditsUsed] = useState(savedAnalysisRun?.approxCreditsUsed ?? '0')
+  const [statsStatus, setStatsStatus] = useState<StatsStatus>('idle')
+  const [statsMessage, setStatsMessage] = useState('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
+  const [analysisMessage, setAnalysisMessage] = useState('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
+  const [approxCreditsUsed, setApproxCreditsUsed] = useState('0')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
-  const [setupCollapsed, setSetupCollapsed] = useState(Boolean(savedAnalysisRun))
+  const [setupCollapsed, setSetupCollapsed] = useState(false)
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
   const [reportMessage, setReportMessage] = useState('')
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
+  const [layerBrowserOpen, setLayerBrowserOpen] = useState(false)
+  const [portalLayerItems, setPortalLayerItems] = useState<PortalLayerItem[]>([])
+  const [layerBrowserStatus, setLayerBrowserStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [layerBrowserMessage, setLayerBrowserMessage] = useState('Sign in to browse ArcGIS feature services.')
   const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
@@ -446,6 +439,7 @@ function App() {
 
   useEffect(() => {
     let alive = true
+    clearSavedAnalysisRun()
 
     restoreArcGISSession()
       .then((restoredUser) => {
@@ -693,7 +687,64 @@ function App() {
   }
 
   function handleLoadProjectLayer() {
-    setLoadedProjectLayerUrl(projectLayerUrl.trim())
+    const nextUrl = featureLayerZeroUrl(projectLayerUrl)
+    setProjectLayerUrl(nextUrl)
+    setLoadedProjectLayerUrl(nextUrl)
+  }
+
+  async function handleBrowseProjectLayers() {
+    setLayerBrowserOpen(true)
+    setLayerBrowserStatus('loading')
+    setLayerBrowserMessage('Loading ArcGIS feature services you can access...')
+
+    try {
+      const signedInUser = await ensureSignedIn()
+      const token = await getArcGISToken()
+      const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
+      search.searchParams.set('f', 'json')
+      search.searchParams.set('token', token)
+      search.searchParams.set('q', `owner:${signedInUser.username} AND type:"Feature Service"`)
+      search.searchParams.set('sortField', 'modified')
+      search.searchParams.set('sortOrder', 'desc')
+      search.searchParams.set('num', '20')
+
+      const response = await fetch(search.toString())
+      if (!response.ok) throw new Error(`ArcGIS search failed: ${response.status}`)
+      const data = await response.json() as { error?: { message?: string }; results?: Array<PortalLayerItem> }
+      if (data.error) throw new Error(data.error.message ?? 'ArcGIS search returned an error.')
+
+      const layers = (data.results ?? [])
+        .filter((item) => item.url)
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          owner: item.owner,
+          modified: item.modified,
+          url: item.url,
+        }))
+
+      setPortalLayerItems(layers)
+      setLayerBrowserStatus('ready')
+      setLayerBrowserMessage(layers.length ? 'Select one of your feature services. The app will use layer 0 by default.' : 'No feature services were found in your ArcGIS content.')
+    } catch (error) {
+      setLayerBrowserStatus('error')
+      setLayerBrowserMessage(error instanceof Error ? error.message : 'Could not browse ArcGIS feature services.')
+    }
+  }
+
+  function handleSelectPortalLayer(item: PortalLayerItem) {
+    if (!item.url) {
+      setLayerBrowserStatus('error')
+      setLayerBrowserMessage('That item does not expose a FeatureServer URL.')
+      return
+    }
+
+    const nextUrl = featureLayerZeroUrl(item.url)
+    setProjectLayerUrl(nextUrl)
+    setLoadedProjectLayerUrl(nextUrl)
+    setProjectName((current) => current.trim() || item.title.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project')
+    setLayerBrowserOpen(false)
+    setLayerBrowserStatus('idle')
   }
 
   function handleLoadExistingResults() {
@@ -810,6 +861,9 @@ function App() {
   function handleResetAnalysis() {
     setSetupCollapsed(false)
     clearSavedAnalysisRun()
+    setProjectName('')
+    setProjectLayerUrl(defaultProjectLayerUrl)
+    setLoadedProjectLayerUrl(defaultProjectLayerUrl)
     setStatsTableUrl(defaultStatsTableUrl)
     setCnddbLayerUrl(defaultCnddbLayerUrl)
     setExistingSummaryTableUrl('')
@@ -823,6 +877,10 @@ function App() {
     setApproxCreditsUsed('0')
     setAnalysisStatus('idle')
     setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
+    setLayerBrowserOpen(false)
+    setPortalLayerItems([])
+    setLayerBrowserStatus('idle')
+    setLayerBrowserMessage('Sign in to browse ArcGIS feature services.')
     setReportStatus('idle')
     setReportMessage('')
     setReportLinks({ animals: '', plants: '', excel: '' })
@@ -948,11 +1006,34 @@ function App() {
                 <p>Select a layer, upload features, or sketch on the map.</p>
               </div>
             </div>
-            <button className="upload-target" type="button">
+            <button className="upload-target" type="button" onClick={handleBrowseProjectLayers}>
               <Upload size={18} />
-              {projectSketch.source === 'FeatureLayer' ? 'ArcGIS feature service layer' : projectSketch.featureCount > 0 ? `${projectSketch.geometryType} sketch` : 'PGE_SM_Project_Components'}
+              {projectSketch.source === 'FeatureLayer' ? 'ArcGIS feature service layer selected' : projectSketch.featureCount > 0 ? `${projectSketch.geometryType} sketch ready` : 'Browse ArcGIS feature services'}
               <ChevronRight size={17} />
             </button>
+            {layerBrowserOpen && (
+              <div className="portal-layer-browser">
+                <div className="browser-heading">
+                  <strong>ArcGIS feature services</strong>
+                  <button type="button" onClick={() => setLayerBrowserOpen(false)}>Close</button>
+                </div>
+                <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
+                {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
+                {portalLayerItems.length > 0 && (
+                  <div className="portal-layer-list">
+                    {portalLayerItems.map((item) => (
+                      <button className="portal-layer-row" type="button" key={item.id} onClick={() => handleSelectPortalLayer(item)}>
+                        <span>
+                          <strong>{item.title}</strong>
+                          <small>{item.owner}{item.modified ? ` - ${new Date(item.modified).toLocaleDateString()}` : ''}</small>
+                        </span>
+                        <ChevronRight size={16} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="field-grid layer-url-grid">
               <label>
                 Feature service layer URL

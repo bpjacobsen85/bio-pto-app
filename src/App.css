@@ -247,6 +247,88 @@ h3 {
   font-weight: 650;
 }
 
+.upload-target:hover,
+.portal-layer-row:hover {
+  border-color: #7fb1d4;
+  background: #f5fbff;
+}
+
+.portal-layer-browser {
+  margin-top: 10px;
+  border: 1px solid #ccd7e1;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.browser-heading {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid #e2e8ef;
+}
+
+.browser-heading button {
+  border: 0;
+  background: transparent;
+  color: #1b6ca8;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.browser-message,
+.browser-loading {
+  padding: 10px;
+  color: #697785;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.browser-message.error {
+  color: #b4232f;
+}
+
+.portal-layer-list {
+  display: grid;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.portal-layer-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-top: 1px solid #edf1f5;
+  background: #fff;
+  color: #263542;
+  text-align: left;
+}
+
+.portal-layer-row span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.portal-layer-row strong,
+.portal-layer-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-layer-row small {
+  color: #697785;
+  font-size: 11px;
+}
+
 .field-grid {
   display: grid;
   gap: 10px;
