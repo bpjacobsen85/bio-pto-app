@@ -106,6 +106,10 @@ h3 {
   font-weight: 700;
 }
 
+.report-secondary-button {
+  display: none;
+}
+
 .icon-button {
   width: 36px;
   padding: 0;
@@ -2078,7 +2082,11 @@ input {
 
 /* Results workspace keeps the map visible after setup/model execution. */
 .workspace.results-workspace.setup-collapsed {
-  grid-template-columns: 52px minmax(360px, 38vw) minmax(760px, 1fr);
+  grid-template-columns: minmax(380px, 42vw) minmax(760px, 1fr);
+}
+
+.workspace.results-workspace.setup-collapsed .setup-panel {
+  display: none;
 }
 
 .workspace.results-workspace.setup-collapsed .map-stage {
@@ -2099,6 +2107,9 @@ input {
 
 .workspace.results-workspace.setup-collapsed .review-header {
   grid-column: 1 / -1;
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2119,7 +2130,7 @@ input {
 .workspace.results-workspace.setup-collapsed .summary-grid {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(8, minmax(78px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 8px;
   margin-bottom: 0;
 }
@@ -2136,7 +2147,12 @@ input {
 
 .workspace.results-workspace.setup-collapsed .report-action-row {
   grid-column: 1 / -1;
+  align-items: center;
   margin-bottom: 0;
+}
+
+.workspace.results-workspace.setup-collapsed .report-secondary-button {
+  display: none;
 }
 
 .workspace.results-workspace.setup-collapsed .table-card,
@@ -2162,7 +2178,7 @@ input {
 }
 
 .workspace.results-workspace.setup-collapsed .species-list {
-  max-height: calc(100vh - 520px);
+  max-height: calc(100vh - 455px);
   min-height: auto;
   border-top: 1px solid #edf1f5;
 }
@@ -2182,7 +2198,7 @@ input {
   grid-column: 2;
   overflow: auto;
   padding: 14px;
-  max-height: calc(100vh - 338px);
+  max-height: calc(100vh - 305px);
 }
 
 .workspace.results-workspace.setup-collapsed .detail-heading {
@@ -2244,11 +2260,11 @@ input {
 
 @media (max-width: 1180px) {
   .workspace.results-workspace.setup-collapsed {
-    grid-template-columns: 52px minmax(420px, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .workspace.results-workspace.setup-collapsed .results-panel {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .workspace.results-workspace.setup-collapsed .map-stage {

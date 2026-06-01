@@ -689,13 +689,6 @@ function App() {
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
   const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
-  const runStateLabel = analysisStatus === 'ready'
-    ? 'Model complete'
-    : analysisStatus === 'running' || analysisStatus === 'submitting'
-      ? 'Model running'
-      : analysisStatus === 'error'
-        ? 'Run needs attention'
-        : 'Ready for setup'
 
   async function ensureSignedIn() {
     if (user) return user
@@ -1373,21 +1366,8 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
-          {setupCollapsed && (
-            <div className="map-run-summary">
-              <div>
-                <p className="eyebrow">{runStateLabel}</p>
-                <h2>{projectName || 'BIO PTO Project'}</h2>
-                <span>{totalSpecies.toLocaleString()} species - {bufferLayerUrl ? 'Buffer loaded' : 'Buffer pending'} - {cnddbLayerUrl ? 'CNDDB loaded' : 'CNDDB pending'}</span>
-              </div>
-              <button type="button" onClick={() => setSetupCollapsed(false)}>
-                <PanelLeftOpen size={15} />
-                Edit setup
-              </button>
-            </div>
-          )}
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${setupCollapsed && hasResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={setupCollapsed && hasResults} onProjectSketchChange={setProjectSketch} />
           </div>
         </section>
 
@@ -1400,6 +1380,10 @@ function App() {
             </div>
             <div className="review-actions">
               <button type="button" onClick={() => setSetupCollapsed(false)}><PanelLeftOpen size={16} /> Edit setup / run again</button>
+              <button className="primary-button" type="button" onClick={handleGenerateReport} disabled={!speciesResults.length || reportStatus === 'generating'}>
+                <FileText size={16} />
+                {reportStatus === 'generating' ? 'Generating...' : 'Generate Report'}
+              </button>
             </div>
           </div>
 
@@ -1434,7 +1418,7 @@ function App() {
               <span><strong>{inReviewSpeciesCount}</strong> in review</span>
               <span><strong>{notStartedSpeciesCount}</strong> not started</span>
             </div>
-            <button className="primary-button" type="button" onClick={handleGenerateReport} disabled={!speciesResults.length || reportStatus === 'generating'}>
+            <button className="primary-button report-secondary-button" type="button" onClick={handleGenerateReport} disabled={!speciesResults.length || reportStatus === 'generating'}>
               <FileText size={16} />
               {reportStatus === 'generating' ? 'Generating Report...' : 'Generate Report'}
             </button>

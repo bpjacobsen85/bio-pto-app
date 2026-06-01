@@ -43,6 +43,7 @@ type ArcGISMapProps = {
   bufferLayerUrl?: string
   cnddbLayerUrl?: string
   selectedSpeciesName?: string
+  reviewMode?: boolean
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
 }
 
@@ -113,7 +114,7 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, selectedSpeciesName, reviewMode = false, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
@@ -355,7 +356,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     sketch.on('delete', notifyInputChange)
 
     view.when(() => {
-      view.ui.add(sketch, 'top-right')
+      if (!reviewMode) view.ui.add(sketch, 'top-right')
       view.ui.move('zoom', 'bottom-left')
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
@@ -391,7 +392,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [bufferLayerUrl, cnddbLayerUrl, onProjectSketchChange, webMapId])
+  }, [bufferLayerUrl, cnddbLayerUrl, onProjectSketchChange, reviewMode, webMapId])
 
   return (
     <div className="arcgis-map-shell">
