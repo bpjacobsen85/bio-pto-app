@@ -963,6 +963,8 @@ input {
 
 .review-actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -981,6 +983,38 @@ input {
   font-size: 12px;
   font-weight: 800;
   padding: 0 12px;
+}
+
+.review-actions .primary-button {
+  background: #1b6ca8;
+  color: #fff;
+  border-color: #1b6ca8;
+}
+
+.review-layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #bdd6e8;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.review-actions .review-layout-toggle button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #31556d;
+}
+
+.review-actions .review-layout-toggle button + button {
+  border-left: 1px solid #d7e4ee;
+}
+
+.review-actions .review-layout-toggle button.selected {
+  background: #133b5c;
+  color: #fff;
 }
 
 .run-status {
@@ -2206,6 +2240,77 @@ input {
   margin: 0 0 12px;
   padding: 0;
   border-bottom: 0;
+}
+
+.workspace.table-review-workspace.setup-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace.table-review-workspace.setup-collapsed .map-stage {
+  display: none;
+}
+
+.workspace.table-review-workspace.setup-collapsed .results-panel {
+  grid-template-columns: minmax(720px, 1fr) minmax(360px, 430px);
+  height: 100%;
+}
+
+.workspace.table-review-workspace.setup-collapsed .run-status {
+  display: none;
+}
+
+.workspace.table-review-workspace.setup-collapsed .summary-grid {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.workspace.table-review-workspace.setup-collapsed .report-action-row {
+  grid-column: 2;
+  grid-row: 3 / span 1;
+}
+
+.workspace.table-review-workspace.setup-collapsed .table-card {
+  grid-column: 1;
+}
+
+.workspace.table-review-workspace.setup-collapsed .species-table-header {
+  display: grid;
+  grid-template-columns: 110px minmax(140px, 1.1fr) minmax(140px, 1.1fr) 92px 86px 100px 112px;
+  gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid #edf1f5;
+  border-bottom: 1px solid #edf1f5;
+  background: #f8fafc;
+  color: #4f6070;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.workspace.table-review-workspace.setup-collapsed .species-list {
+  max-height: calc(100vh - 405px);
+}
+
+.workspace.table-review-workspace.setup-collapsed .species-row {
+  grid-template-columns: 110px minmax(140px, 1.1fr) minmax(140px, 1.1fr) 92px 86px 100px 112px;
+  min-height: 58px;
+  gap: 10px;
+}
+
+.workspace.table-review-workspace.setup-collapsed .species-scientific-cell,
+.workspace.table-review-workspace.setup-collapsed .species-extra-cell {
+  display: block;
+}
+
+.workspace.table-review-workspace.setup-collapsed .species-name em,
+.workspace.table-review-workspace.setup-collapsed .species-name small {
+  display: none;
+}
+
+.workspace.table-review-workspace.setup-collapsed .detail-panel {
+  grid-column: 2;
+  grid-row: 4 / span 1;
+  max-height: calc(100vh - 315px);
 }
 
 .map-run-summary {

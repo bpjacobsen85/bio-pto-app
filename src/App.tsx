@@ -6,6 +6,7 @@ import {
   FileText,
   FolderOpen,
   Layers3,
+  Map as MapIcon,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
@@ -14,6 +15,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  Table2,
   Upload,
   X,
 } from 'lucide-react'
@@ -30,6 +32,7 @@ type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Rev
 type ReportStatus = 'idle' | 'generating' | 'ready' | 'error'
 type AnalysisStatus = 'idle' | 'submitting' | 'running' | 'ready' | 'error'
 type StatsStatus = 'idle' | 'loading' | 'ready' | 'error'
+type ReviewLayout = 'map' | 'table'
 
 type SpeciesResult = {
   objectId: number
@@ -465,6 +468,7 @@ function App() {
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
   const [setupCollapsed, setSetupCollapsed] = useState(false)
+  const [reviewLayout, setReviewLayout] = useState<ReviewLayout>('map')
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
   const [reportMessage, setReportMessage] = useState('')
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
@@ -689,6 +693,7 @@ function App() {
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
   const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
+  const isReviewingResults = setupCollapsed && hasResults
 
   async function ensureSignedIn() {
     if (user) return user
@@ -1122,7 +1127,7 @@ function App() {
         </div>
       </header>
 
-      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''} ${hasResults ? 'results-workspace' : ''}`}>
+      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''} ${hasResults ? 'results-workspace' : ''} ${isReviewingResults && reviewLayout === 'table' ? 'table-review-workspace' : ''}`}>
         <aside className={`setup-panel ${setupCollapsed ? 'collapsed' : ''}`} aria-label="Analysis setup">
           {setupCollapsed ? (
             <button className="setup-rail-button" type="button" onClick={() => setSetupCollapsed(false)} aria-label="Show analysis setup">
@@ -1367,7 +1372,7 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${setupCollapsed && hasResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={setupCollapsed && hasResults} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} />
           </div>
         </section>
 
@@ -1379,6 +1384,18 @@ function App() {
               <small>{analysisStatus === 'ready' ? 'Completed notebook run' : statsStatus === 'idle' ? 'No results loaded' : statsStatus}</small>
             </div>
             <div className="review-actions">
+              {hasResults && (
+                <div className="review-layout-toggle" aria-label="Review layout">
+                  <button className={reviewLayout === 'map' ? 'selected' : ''} type="button" onClick={() => setReviewLayout('map')}>
+                    <MapIcon size={15} />
+                    Map View
+                  </button>
+                  <button className={reviewLayout === 'table' ? 'selected' : ''} type="button" onClick={() => setReviewLayout('table')}>
+                    <Table2 size={15} />
+                    Table Review
+                  </button>
+                </div>
+              )}
               <button type="button" onClick={() => setSetupCollapsed(false)}><PanelLeftOpen size={16} /> Edit setup / run again</button>
               <button className="primary-button" type="button" onClick={handleGenerateReport} disabled={!speciesResults.length || reportStatus === 'generating'}>
                 <FileText size={16} />
