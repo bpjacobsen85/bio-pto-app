@@ -1068,7 +1068,7 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
           {speciesResults.length > 0 && (
             <div className="legend-panel">

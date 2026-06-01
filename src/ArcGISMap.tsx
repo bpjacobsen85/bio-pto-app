@@ -40,6 +40,7 @@ type ArcGISMapProps = {
   activeMapTool?: 'layers' | 'search' | null
   webMapId?: string
   projectLayerUrl?: string
+  bufferLayerUrl?: string
   cnddbLayerUrl?: string
   selectedSpeciesName?: string
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
@@ -112,7 +113,7 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
@@ -133,19 +134,62 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, cnd
     const projectLayer = new GraphicsLayer({ title: 'Project input' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results' })
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input' })
+    const bufferOutputLayer = bufferLayerUrl?.trim()
+      ? new FeatureLayer({
+        url: bufferLayerUrl.trim(),
+        title: 'PTO buffer',
+        outFields: ['*'],
+        opacity: 0.28,
+        popupEnabled: true,
+        popupTemplate: {
+          title: 'PTO buffer',
+          content: 'PTO buffer output from the notebook run.',
+        },
+        renderer: {
+          type: 'simple',
+          symbol: {
+            type: 'simple-fill',
+            color: [27, 108, 168, 0.18],
+            outline: { color: [27, 108, 168, 0.9], width: 2 },
+          },
+        },
+      })
+      : null
     const cnddbOutputLayer = cnddbLayerUrl?.trim()
       ? new FeatureLayer({
         url: cnddbLayerUrl.trim(),
         title: 'CNDDB output results',
         outFields: ['*'],
         opacity: 0.72,
+        popupEnabled: true,
+        popupTemplate: {
+          title: '{CNAME}',
+          content: [
+            {
+              type: 'fields',
+              fieldInfos: [
+                { fieldName: 'CNAME', label: 'Common name' },
+                { fieldName: 'SNAME', label: 'Scientific name' },
+                { fieldName: 'ELMCODE', label: 'Element code' },
+                { fieldName: 'PTO_Review', label: 'PTO review' },
+                { fieldName: 'Distance', label: 'Distance' },
+                { fieldName: 'MIN_buff', label: 'Nearest distance (mi)' },
+                { fieldName: 'ACCURACY', label: 'Accuracy' },
+                { fieldName: 'OCCNUMBER', label: 'Occurrence number' },
+                { fieldName: 'EOINDEX', label: 'EO index' },
+                { fieldName: 'LASTOBS', label: 'Last observed' },
+                { fieldName: 'PRESENCE', label: 'Presence' },
+              ],
+            },
+          ],
+        },
       })
       : null
 
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
-    map.addMany(cnddbOutputLayer ? [projectLayer, resultLayer, cnddbOutputLayer, sketchLayer] : [projectLayer, resultLayer, sketchLayer])
+    map.addMany([projectLayer, resultLayer, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
 
     const view = new MapView({
       container: containerRef.current,
@@ -315,8 +359,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, cnd
       view.ui.move('zoom', 'bottom-left')
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
-          if (cnddbOutputLayer.fullExtent) {
-            void view.goTo(cnddbOutputLayer.fullExtent.expand(1.2), { duration: 700 })
+          const targetExtent = bufferOutputLayer?.fullExtent ?? cnddbOutputLayer.fullExtent
+          if (targetExtent) {
+            void view.goTo(targetExtent.expand(1.2), { duration: 700 })
           }
         })
       }
@@ -342,10 +387,11 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, cnd
       search.destroy()
       sketch.destroy()
       projectFeatureLayer?.destroy()
+      bufferOutputLayer?.destroy()
       cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [cnddbLayerUrl, onProjectSketchChange, webMapId])
+  }, [bufferLayerUrl, cnddbLayerUrl, onProjectSketchChange, webMapId])
 
   return (
     <div className="arcgis-map-shell">
