@@ -26,6 +26,7 @@ type ConservationFilter = string
 type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
 type ReportStatus = 'idle' | 'generating' | 'ready' | 'error'
 type AnalysisStatus = 'idle' | 'submitting' | 'running' | 'ready' | 'error'
+type StatsStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 type SpeciesResult = {
   objectId: number
@@ -76,8 +77,8 @@ type PtoCriteria = {
 }
 
 const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/Test_Tool_Input/FeatureServer/0'
-const defaultCnddbLayerUrl = import.meta.env.VITE_TEST_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_CNDDB_clip_20260530_004117/FeatureServer/0'
-const defaultStatsTableUrl = import.meta.env.VITE_TEST_SUMMARY_TABLE_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/SDGE_Suncrest_CNDDB_All_Stats_20260530_003947/FeatureServer/0'
+const defaultCnddbLayerUrl = ''
+const defaultStatsTableUrl = ''
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
 const runModelToolUrl = import.meta.env.VITE_RUN_MODEL_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/1714398fc38148488ee82a2a6c698c82/GPServer'
 const generateReportToolUrl = import.meta.env.VITE_REPORT_NOTEBOOK_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/29e2ba5e56fb42faba0f2e9d9ba06b4a/GPServer'
@@ -117,12 +118,7 @@ const conservationGroupFilters = [
   { id: 'group:none', label: 'No listing shown' },
 ]
 
-const savedRuns = [
-  { name: 'SDGE_Suncrest', date: 'Today', species: 0, status: 'Loaded' },
-  { name: 'PGE_SM', date: 'May 29', species: 312, status: 'Complete' },
-  { name: 'Transmission Alt 2', date: 'May 28', species: 148, status: 'Complete' },
-]
-const savedAnalysisRunKey = 'bioPto:lastAnalysisRun'
+const savedAnalysisRunKey = 'bioPto:lastAnalysisRun:v2'
 
 type SavedAnalysisRun = {
   projectName: string
@@ -418,10 +414,10 @@ function App() {
   const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? '')
   const [bufferLayerUrl, setBufferLayerUrl] = useState(savedAnalysisRun?.bufferLayerUrl ?? '')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
-  const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [statsMessage, setStatsMessage] = useState(savedAnalysisRun ? 'Loading saved notebook summary table...' : 'Loading SDGE Suncrest CNDDB stats...')
+  const [statsStatus, setStatsStatus] = useState<StatsStatus>(savedAnalysisRun ? 'loading' : 'idle')
+  const [statsMessage, setStatsMessage] = useState(savedAnalysisRun ? 'Loading saved notebook summary table...' : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(savedAnalysisRun ? 'ready' : 'idle')
-  const [analysisMessage, setAnalysisMessage] = useState(savedAnalysisRun ? `Loaded saved notebook output from ${new Date(savedAnalysisRun.completedAt).toLocaleString()}.` : 'Sample results are loaded for review UI testing.')
+  const [analysisMessage, setAnalysisMessage] = useState(savedAnalysisRun ? `Loaded saved notebook output from ${new Date(savedAnalysisRun.completedAt).toLocaleString()}.` : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
   const [approxCreditsUsed, setApproxCreditsUsed] = useState(savedAnalysisRun?.approxCreditsUsed ?? '3.1')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
@@ -470,8 +466,16 @@ function App() {
     let alive = true
 
     async function loadStatsTable() {
+      if (!statsTableUrl.trim()) {
+        setSpeciesResults([])
+        setSelectedSpeciesId(null)
+        setStatsStatus('idle')
+        setStatsMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
+        return
+      }
+
       setStatsStatus('loading')
-      setStatsMessage(`${analysisStatus === 'ready' ? 'Loading notebook output' : 'Loading sample data'} and species library descriptions...`)
+      setStatsMessage('Loading notebook output and species library descriptions...')
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
@@ -809,7 +813,7 @@ function App() {
     setReviewEdits({})
     setApproxCreditsUsed('3.1')
     setAnalysisStatus('idle')
-    setAnalysisMessage('Sample results are loaded for review UI testing.')
+    setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
     setReportStatus('idle')
     setReportMessage('')
     setReportLinks({ animals: '', plants: '', excel: '' })
@@ -1028,7 +1032,7 @@ function App() {
               <span className="step-index">3</span>
               <div>
                 <h2>Loaded Results</h2>
-                <p>{analysisStatus === 'ready' ? 'Current notebook output services.' : 'Sample output services for testing.'}</p>
+                <p>{analysisStatus === 'ready' ? 'Current notebook output services.' : 'Paste existing outputs here, or run the notebook tool.'}</p>
               </div>
             </div>
             <div className="existing-results-loader">
@@ -1050,7 +1054,7 @@ function App() {
               <span>Full CNDDB</span>
               <strong>{defaultFullCnddbLayerUrl ? 'Public' : 'Unset'}</strong>
               <span>Buffer output</span>
-              <strong>{bufferLayerUrl ? 'Ready' : 'Sample'}</strong>
+              <strong>{bufferLayerUrl ? 'Ready' : 'Not loaded'}</strong>
               <span>Status</span>
               <strong>{analysisStatus === 'idle' ? statsStatus : analysisStatus}</strong>
             </div>
@@ -1065,15 +1069,17 @@ function App() {
           <div className="map-canvas">
             <ArcGISMap key={`${loadedProjectLayerUrl}|${cnddbLayerUrl}`} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
-          <div className="legend-panel">
-            <h3>Potential</h3>
-            {ratingCounts.map((item) => (
-              <div className="legend-row" key={item.label}>
-                <span className={`legend-swatch ${item.label.toLowerCase().replaceAll(' ', '-')}`} />
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
+          {speciesResults.length > 0 && (
+            <div className="legend-panel">
+              <h3>Potential</h3>
+              {ratingCounts.map((item) => (
+                <div className="legend-row" key={item.label}>
+                  <span className={`legend-swatch ${item.label.toLowerCase().replaceAll(' ', '-')}`} />
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <aside className="results-panel" aria-label="Analysis results">
@@ -1081,7 +1087,7 @@ function App() {
             <div>
               <p className="eyebrow">Results Review</p>
               <h2>Project: {projectName || 'BIO PTO Project'}</h2>
-              <small>{analysisStatus === 'ready' ? 'Completed notebook run' : `${statsStatus} - sample results`}</small>
+              <small>{analysisStatus === 'ready' ? 'Completed notebook run' : statsStatus === 'idle' ? 'No results loaded' : statsStatus}</small>
             </div>
             <div className="review-actions">
               <button type="button" onClick={() => setSetupCollapsed(false)}><Layers3 size={16} /> Open map</button>
@@ -1091,7 +1097,7 @@ function App() {
           <div className="run-status">
             <CheckCircle2 size={19} />
             <div>
-              <h2>{analysisStatus === 'ready' ? 'Notebook results loaded' : analysisStatus === 'error' ? 'Notebook run needs attention' : statsStatus === 'ready' ? 'Sample results loaded' : statsStatus === 'error' ? 'Results need attention' : 'Loading results'}</h2>
+              <h2>{analysisStatus === 'ready' ? 'Notebook results loaded' : analysisStatus === 'error' ? 'Notebook run needs attention' : statsStatus === 'ready' ? 'Results loaded' : statsStatus === 'error' ? 'Results need attention' : statsStatus === 'idle' ? 'No results loaded' : 'Loading results'}</h2>
               <p>{analysisStatus === 'idle' ? statsMessage : analysisMessage}</p>
             </div>
           </div>
@@ -1313,25 +1319,6 @@ function App() {
             </div>
           </div>
         </aside>
-      </section>
-
-      <section className="saved-runs" aria-label="Saved analyses">
-        <div>
-          <p className="eyebrow">Saved analyses</p>
-          <h2>Recent ArcGIS Online runs</h2>
-        </div>
-        <div className="saved-run-list">
-          {savedRuns.map((run) => (
-            <button type="button" className="saved-run" key={run.name}>
-              <ShieldCheck size={17} />
-              <span>
-                <strong>{run.name}</strong>
-                <small>{run.date} - {run.species || totalSpecies || '--'} species</small>
-              </span>
-              <em>{run.status}</em>
-            </button>
-          ))}
-        </div>
       </section>
     </main>
   )

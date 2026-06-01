@@ -230,7 +230,9 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
       },
     })
 
-    projectLayer.addMany([buffer, corridor])
+    if (!projectUrlRef.current) {
+      projectLayer.addMany([buffer, corridor])
+    }
     if (!cnddbOutputLayer) {
       resultLayer.addMany([
         makeOccurrence(-121.61, 38.48, '#d64545', 'High potential'),
@@ -331,9 +333,13 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
       }
 
       if (!url) {
+        projectLayer.removeAll()
+        projectLayer.addMany([buffer, corridor])
         notifyInputChange()
         return
       }
+
+      projectLayer.removeAll()
 
       const layer = new FeatureLayer({
         url,
