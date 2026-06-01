@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef } from 'react'
 import Map from '@arcgis/core/Map'
 import WebMap from '@arcgis/core/WebMap'
+import Graphic from '@arcgis/core/Graphic'
 import MapView from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
@@ -52,6 +53,7 @@ type ArcGISMapProps = {
   reviewMode?: boolean
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
   onRemoveMapLayer?: (id: string) => void
+  onSelectSpeciesFromMap?: (commonName: string) => void
 }
 
 function toFeatureSetGeometryType(type: string | undefined): ProjectInputFeatureSet['geometryType'] | null {
@@ -121,12 +123,13 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const sketchRef = useRef<HTMLDivElement | null>(null)
   const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
   const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
+  const onSelectSpeciesFromMapRef = useRef(onSelectSpeciesFromMap)
 
   useEffect(() => {
     projectUrlRef.current = projectLayerUrl?.trim() ?? ''
@@ -137,10 +140,15 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   }, [selectedSpeciesName])
 
   useEffect(() => {
+    onSelectSpeciesFromMapRef.current = onSelectSpeciesFromMap
+  }, [onSelectSpeciesFromMap])
+
+  useEffect(() => {
     if (!containerRef.current || !layerListRef.current || !sketchRef.current) return
 
     const projectLayer = new GraphicsLayer({ title: 'Project input', listMode: 'hide' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results', listMode: 'hide' })
+    const selectedCnddbLayer = new GraphicsLayer({ title: 'Selected CNDDB species', listMode: 'hide' })
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input', listMode: 'hide' })
     const bufferOutputLayer = bufferLayerUrl?.trim()
       ? new FeatureLayer({
@@ -170,6 +178,42 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         outFields: ['*'],
         opacity: 0.72,
         popupEnabled: true,
+        renderer: {
+          type: 'unique-value',
+          field: 'PTO_Review',
+          defaultSymbol: {
+            type: 'simple-fill',
+            color: [126, 144, 162, 0.28],
+            outline: { color: [88, 103, 119, 0.9], width: 0.8 },
+          },
+          uniqueValueInfos: [
+            {
+              value: 'High',
+              label: 'High',
+              symbol: { type: 'simple-fill', color: [218, 67, 67, 0.42], outline: { color: [151, 34, 34, 1], width: 1.2 } },
+            },
+            {
+              value: 'Moderate',
+              label: 'Moderate',
+              symbol: { type: 'simple-fill', color: [241, 156, 55, 0.4], outline: { color: [178, 101, 19, 1], width: 1.1 } },
+            },
+            {
+              value: 'Low',
+              label: 'Low',
+              symbol: { type: 'simple-fill', color: [62, 157, 122, 0.36], outline: { color: [29, 113, 82, 1], width: 1 } },
+            },
+            {
+              value: 'No Potential',
+              label: 'No Potential',
+              symbol: { type: 'simple-fill', color: [111, 125, 139, 0.18], outline: { color: [91, 103, 116, 0.75], width: 0.8 } },
+            },
+            {
+              value: 'Needs Review',
+              label: 'Needs Review',
+              symbol: { type: 'simple-fill', color: [116, 86, 176, 0.34], outline: { color: [87, 56, 143, 1], width: 1.1 } },
+            },
+          ],
+        },
         popupTemplate: {
           title: '{CNAME}',
           content: [
@@ -205,7 +249,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
-    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
+    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), selectedCnddbLayer, sketchLayer])
 
     const view = new MapView({
       container: containerRef.current,
@@ -325,16 +369,70 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
 
+    const selectedSymbolForGeometry = (geometryType: string | undefined) => {
+      if (geometryType === 'point' || geometryType === 'multipoint') {
+        return new SimpleMarkerSymbol({
+          style: 'circle',
+          color: [255, 255, 255, 0.35],
+          size: 18,
+          outline: { color: [25, 91, 255, 1], width: 4 },
+        })
+      }
+      if (geometryType === 'polyline') {
+        return new SimpleLineSymbol({
+          color: [25, 91, 255, 1],
+          width: 5,
+        })
+      }
+      return new SimpleFillSymbol({
+        color: [255, 255, 255, 0.08],
+        outline: { color: [25, 91, 255, 1], width: 4 },
+      })
+    }
+
+    const updateSelectedSpeciesHighlight = async (commonName: string) => {
+      selectedCnddbLayer.removeAll()
+      if (!cnddbOutputLayer || !commonName) return null
+
+      try {
+        const query = cnddbOutputLayer.createQuery()
+        query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
+        query.outFields = ['CNAME']
+        query.returnGeometry = true
+        query.num = 500
+        const features = await cnddbOutputLayer.queryFeatures(query)
+        const symbol = selectedSymbolForGeometry(cnddbOutputLayer.geometryType)
+        selectedCnddbLayer.addMany(features.features.map((feature) => new Graphic({
+          geometry: feature.geometry,
+          attributes: feature.attributes,
+          symbol,
+        })))
+        return features
+      } catch {
+        return null
+      }
+    }
+
     const applySelectedSpecies = async (commonName: string) => {
       loadedSpeciesName = commonName
       if (!cnddbOutputLayer) return
 
-      cnddbOutputLayer.definitionExpression = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
+      cnddbOutputLayer.definitionExpression = '1=1'
+      cnddbOutputLayer.featureEffect = commonName
+        ? {
+          filter: { where: `CNAME = '${escapeSqlLiteral(commonName)}'` },
+          includedEffect: 'brightness(125%) saturate(135%)',
+          excludedEffect: 'grayscale(65%) opacity(32%)',
+        }
+        : null
+      const selectedFeatures = await updateSelectedSpeciesHighlight(commonName)
 
       if (!commonName) return
 
       try {
-        const extentResult = await cnddbOutputLayer.queryExtent()
+        const query = cnddbOutputLayer.createQuery()
+        query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
+        const extentResult = selectedFeatures?.features.length ? await cnddbOutputLayer.queryExtent(query) : await cnddbOutputLayer.queryExtent()
         if (extentResult.extent) {
           await view.goTo(extentResult.extent.expand(1.5), { duration: 650 })
         }
@@ -342,6 +440,19 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         // Some output layers may not expose matching CNAME values; keep the table selection working either way.
       }
     }
+
+    const mapClickHandle = view.on('click', async (event) => {
+      if (!cnddbOutputLayer || !reviewMode) return
+      try {
+        const response = await view.hitTest(event, { include: cnddbOutputLayer })
+        const result = response.results.find((candidate) => candidate.type === 'graphic' && 'graphic' in candidate)
+        const graphic = result?.type === 'graphic' ? result.graphic : null
+        const commonName = String(graphic?.attributes?.CNAME ?? '').trim()
+        if (commonName) onSelectSpeciesFromMapRef.current?.(commonName)
+      } catch {
+        // Map selection should never interrupt normal pan/zoom/popup interaction.
+      }
+    })
 
     const loadProjectFeatureLayer = async (url: string) => {
       loadedProjectUrl = url
@@ -439,6 +550,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     return () => {
       window.clearInterval(interval)
+      mapClickHandle.remove()
       layerList.destroy()
       sketch.destroy()
       projectFeatureLayer?.destroy()

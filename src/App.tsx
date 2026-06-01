@@ -882,6 +882,20 @@ function App() {
     setSelectedSpeciesId(speciesResults[0]?.objectId ?? null)
   }
 
+  function handleSelectSpeciesFromMap(commonName: string) {
+    const normalizedName = commonName.trim().toLowerCase()
+    const matchedSpecies = speciesResults.find((row) => row.common.trim().toLowerCase() === normalizedName)
+    if (!matchedSpecies) return
+
+    const isVisibleInCurrentList = filteredSpeciesResults.some((row) => row.objectId === matchedSpecies.objectId)
+    if (!isVisibleInCurrentList) {
+      setSpeciesTypeFilter('All')
+      setRatingFilter(null)
+      setConservationFilters([])
+    }
+    setSelectedSpeciesId(matchedSpecies.objectId)
+  }
+
   function updatePtoCriteria(key: keyof PtoCriteria, value: string) {
     const next = Number(value)
     if (!Number.isFinite(next)) return
@@ -1440,11 +1454,10 @@ function App() {
                     <Settings2 size={15} />
                   </button>
                 </div>
-                <button className="browser-folder-row" type="button">
+                <div className="browser-folder-row" aria-label="Layer search source">
                   <FolderOpen size={16} />
                   {portalSearchScope === 'mine' ? 'All my content' : portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}
-                  <ChevronRight size={14} />
-                </button>
+                </div>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
                 <div className={`portal-browser-content ${selectedPortalItem ? 'has-detail' : ''}`}>
@@ -1634,7 +1647,7 @@ function App() {
             )}
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={(id) => setMapAddedLayers((current) => current.filter((layer) => layer.id !== id))} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={(id) => setMapAddedLayers((current) => current.filter((layer) => layer.id !== id))} onSelectSpeciesFromMap={handleSelectSpeciesFromMap} />
           </div>
         </section>
 

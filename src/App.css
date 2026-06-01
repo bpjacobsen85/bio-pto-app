@@ -344,11 +344,15 @@ h3 {
   min-height: 38px;
   margin: 10px 12px 8px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border: 1px solid #aeb9c4;
+  border: 1px solid #d9e1e8;
+  background: #f7fafc;
+  color: #536272;
+  font-size: 13px;
+  font-weight: 650;
   text-align: left;
 }
 
