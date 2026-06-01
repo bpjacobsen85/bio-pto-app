@@ -36,6 +36,7 @@ type ReviewLayout = 'map' | 'table'
 type SpeciesResult = {
   objectId: number
   objectIdField: string
+  editableFields: string[]
   elmCode: string
   rating: Rating
   reviewStatus: ReviewStatus
@@ -279,6 +280,13 @@ async function applyArcgisTableUpdate(layerUrl: string, token: string, attribute
     const editError = result?.error
     throw new Error([editError?.message, editError?.description, ...(editError?.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS did not save the review edit.')
   }
+}
+
+function filterAttributesToFields(attributes: Record<string, unknown>, fieldNames: string[], requiredFields: string[] = []) {
+  if (!fieldNames.length) return attributes
+  const keep = new Set(fieldNames)
+  requiredFields.forEach((fieldName) => keep.add(fieldName))
+  return Object.fromEntries(Object.entries(attributes).filter(([key]) => keep.has(key)))
 }
 
 function normalizeReportDownloadUrl(url: string) {
@@ -657,6 +665,9 @@ function App() {
         if (data.error) throw new Error(data.error.message ?? 'Stats table returned an ArcGIS error.')
         const serviceObjectIdField = data.objectIdFieldName
           ?? data.fields?.find((field) => String(field.type ?? '').toLowerCase() === 'esrifieldtypeoid')?.name
+        const editableFields = (data.fields ?? [])
+          .map((field) => field.name)
+          .filter((name): name is string => Boolean(name))
 
         const rows = (data.features ?? []).map((feature, index) => {
           const attributes = feature.attributes
@@ -677,6 +688,7 @@ function App() {
           return {
             objectId: Number(attributes[objectIdField] ?? attributes.ObjectId ?? attributes.OBJECTID ?? attributes.OBJECTID_1 ?? attributes.FID ?? index + 1),
             objectIdField,
+            editableFields,
             elmCode,
             rating: normalizeRating(attributes.PTO_Review),
             reviewStatus: normalizeReviewStatus(attributes.review_status),
@@ -795,6 +807,11 @@ function App() {
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
   const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
   const isReviewingResults = setupCollapsed && hasResults
+
+  useEffect(() => {
+    setReviewSaveStatus('idle')
+    setReviewSaveMessage('')
+  }, [selectedSpeciesId])
 
   async function ensureSignedIn() {
     if (user) return user
@@ -1148,7 +1165,19 @@ function App() {
     try {
       await ensureSignedIn()
       const token = await getArcGISToken()
-      await applyArcgisTableUpdate(statsTableUrl, token, attributes)
+      const saveAttributes = filterAttributesToFields(attributes, species.editableFields, [species.objectIdField])
+      try {
+        await applyArcgisTableUpdate(statsTableUrl, token, saveAttributes)
+      } catch (firstError) {
+        const essentialAttributes = filterAttributesToFields({
+          [species.objectIdField]: species.objectId,
+          review_status: nextEdit.status,
+          reviewed_potential: nextEdit.rating ?? species.reviewedPotential ?? species.rating,
+          final_report_description: nextEdit.habitatSummary ?? species.finalReportDescription ?? buildFinalReportDescription(species),
+        }, species.editableFields, [species.objectIdField])
+        await applyArcgisTableUpdate(statsTableUrl, token, essentialAttributes)
+        console.warn('Saved core review fields after optional audit fields were rejected.', firstError)
+      }
       setSpeciesResults((rows) => rows.map((row) => row.objectId === species.objectId
         ? {
             ...row,
