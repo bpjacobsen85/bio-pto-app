@@ -122,6 +122,43 @@ const savedRuns = [
   { name: 'PGE_SM', date: 'May 29', species: 312, status: 'Complete' },
   { name: 'Transmission Alt 2', date: 'May 28', species: 148, status: 'Complete' },
 ]
+const savedAnalysisRunKey = 'bioPto:lastAnalysisRun'
+
+type SavedAnalysisRun = {
+  projectName: string
+  summaryTableUrl: string
+  cnddbLayerUrl: string
+  bufferLayerUrl: string
+  approxCreditsUsed: string
+  completedAt: string
+}
+
+function readSavedAnalysisRun(): SavedAnalysisRun | null {
+  try {
+    const raw = window.localStorage.getItem(savedAnalysisRunKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<SavedAnalysisRun>
+    if (!parsed.summaryTableUrl) return null
+    return {
+      projectName: parsed.projectName || 'BIO_PTO_Project',
+      summaryTableUrl: featureLayerZeroUrl(parsed.summaryTableUrl),
+      cnddbLayerUrl: parsed.cnddbLayerUrl ? featureLayerZeroUrl(parsed.cnddbLayerUrl) : defaultCnddbLayerUrl,
+      bufferLayerUrl: parsed.bufferLayerUrl || '',
+      approxCreditsUsed: parsed.approxCreditsUsed || '0',
+      completedAt: parsed.completedAt || new Date().toISOString(),
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveAnalysisRun(run: SavedAnalysisRun) {
+  window.localStorage.setItem(savedAnalysisRunKey, JSON.stringify(run))
+}
+
+function clearSavedAnalysisRun() {
+  window.localStorage.removeItem(savedAnalysisRunKey)
+}
 
 function RatingPill({ rating }: { rating: Rating }) {
   return <span className={`rating-pill ${rating.toLowerCase().replaceAll(' ', '-')}`}>{rating}</span>
@@ -367,28 +404,29 @@ async function loadLibraryDescriptions() {
 }
 
 function App() {
+  const savedAnalysisRun = useMemo(() => readSavedAnalysisRun(), [])
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
   const [activeMapTool, setActiveMapTool] = useState<MapTool>('layers')
-  const [projectName, setProjectName] = useState('BIO_PTO_Test')
+  const [projectName, setProjectName] = useState(savedAnalysisRun?.projectName ?? 'BIO_PTO_Test')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
-  const [statsTableUrl, setStatsTableUrl] = useState(defaultStatsTableUrl)
-  const [cnddbLayerUrl, setCnddbLayerUrl] = useState(defaultCnddbLayerUrl)
-  const [bufferLayerUrl, setBufferLayerUrl] = useState('')
+  const [statsTableUrl, setStatsTableUrl] = useState(savedAnalysisRun?.summaryTableUrl ?? defaultStatsTableUrl)
+  const [cnddbLayerUrl, setCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? defaultCnddbLayerUrl)
+  const [bufferLayerUrl, setBufferLayerUrl] = useState(savedAnalysisRun?.bufferLayerUrl ?? '')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
   const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [statsMessage, setStatsMessage] = useState('Loading SDGE Suncrest CNDDB stats...')
-  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
-  const [analysisMessage, setAnalysisMessage] = useState('Sample results are loaded for review UI testing.')
-  const [approxCreditsUsed, setApproxCreditsUsed] = useState('3.1')
+  const [statsMessage, setStatsMessage] = useState(savedAnalysisRun ? 'Loading saved notebook summary table...' : 'Loading SDGE Suncrest CNDDB stats...')
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(savedAnalysisRun ? 'ready' : 'idle')
+  const [analysisMessage, setAnalysisMessage] = useState(savedAnalysisRun ? `Loaded saved notebook output from ${new Date(savedAnalysisRun.completedAt).toLocaleString()}.` : 'Sample results are loaded for review UI testing.')
+  const [approxCreditsUsed, setApproxCreditsUsed] = useState(savedAnalysisRun?.approxCreditsUsed ?? '3.1')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
-  const [setupCollapsed, setSetupCollapsed] = useState(false)
+  const [setupCollapsed, setSetupCollapsed] = useState(Boolean(savedAnalysisRun))
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
   const [reportMessage, setReportMessage] = useState('')
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
@@ -431,11 +469,11 @@ function App() {
 
     async function loadStatsTable() {
       setStatsStatus('loading')
-      setStatsMessage('Loading SDGE Suncrest CNDDB stats and species library descriptions...')
+      setStatsMessage(`${analysisStatus === 'ready' ? 'Loading notebook output' : 'Loading sample data'} and species library descriptions...`)
 
       const query = new URL(`${statsTableUrl}/query`)
       query.searchParams.set('where', '1=1')
-      query.searchParams.set('outFields', 'CNAME,SNAME,ELMCODE,TAXONGROUP,Listings,ELMTYPE_DESC,PTO_Review,Suitability_Review,GeneralHabitat,MicroHabitat,Habitats,CWHR_Summary,PTO_Caption_1,Family,Lifeform,BloomingPeriod,ElevationLow_ft,ElevationHigh_ft,References,Min_NEAR_DIST_Miles,Min_Accuracy_Class,FREQUENCY,Sum_Extant,Sum_Current_30yr,Sum_Recent_EO,Sum_Historical_30yr,Sum_Possibly_Extirpated,Sum_Extirpated,Sum_Unknown_EO,Min_Year,ObjectId')
+      query.searchParams.set('outFields', '*')
       query.searchParams.set('returnGeometry', 'false')
       query.searchParams.set('orderByFields', 'PTO_Review ASC, Min_NEAR_DIST_Miles ASC')
       query.searchParams.set('resultRecordCount', '500')
@@ -454,7 +492,7 @@ function App() {
         const data = await statsResponse.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
         if (data.error) throw new Error(data.error.message ?? 'Stats table returned an ArcGIS error.')
 
-        const rows = (data.features ?? []).map((feature) => {
+        const rows = (data.features ?? []).map((feature, index) => {
           const attributes = feature.attributes
           const taxonGroup = String(attributes.TAXONGROUP ?? 'Unknown')
           const elementType = String(attributes.ELMTYPE_DESC ?? '')
@@ -470,7 +508,7 @@ function App() {
             ?? libraryDescriptions.byScientificName.get(normalizeLookupKey(attributes.SNAME))
 
           return {
-            objectId: Number(attributes.ObjectId),
+            objectId: Number(attributes.ObjectId ?? attributes.OBJECTID ?? attributes.OBJECTID_1 ?? attributes.FID ?? index + 1),
             elmCode,
             rating: normalizeRating(attributes.PTO_Review),
             common: String(attributes.CNAME ?? 'Unknown common name'),
@@ -654,6 +692,11 @@ function App() {
     setSetupCollapsed(true)
     setAnalysisStatus('submitting')
     setAnalysisMessage('Signing in and submitting the ArcGIS Notebook web tool...')
+    setSpeciesResults([])
+    setSelectedSpeciesId(null)
+    setRatingFilter(null)
+    setConservationFilters([])
+    setReviewEdits({})
 
     try {
       await ensureSignedIn()
@@ -683,18 +726,30 @@ function App() {
       const nextBufferUrl = outputUrl(bufferOutput)
       const nextCnddbUrl = outputUrl(cnddbOutput)
       const nextSummaryUrl = outputUrl(summaryOutput)
+      const normalizedSummaryUrl = featureLayerZeroUrl(nextSummaryUrl)
+      const normalizedCnddbUrl = nextCnddbUrl ? featureLayerZeroUrl(nextCnddbUrl) : ''
 
-      if (!nextSummaryUrl) {
+      if (!normalizedSummaryUrl) {
         throw new Error('Notebook completed, but Summary_Statistics did not return a URL.')
       }
 
       setBufferLayerUrl(nextBufferUrl)
-      if (nextCnddbUrl) setCnddbLayerUrl(featureLayerZeroUrl(nextCnddbUrl))
-      setStatsTableUrl(nextSummaryUrl)
-      setApproxCreditsUsed(approximateCreditLabel(outputValue(creditOutput)))
+      if (normalizedCnddbUrl) setCnddbLayerUrl(normalizedCnddbUrl)
+      setStatsTableUrl(normalizedSummaryUrl)
+      const creditLabel = approximateCreditLabel(outputValue(creditOutput))
+      setApproxCreditsUsed(creditLabel)
+      saveAnalysisRun({
+        projectName: projectName.trim() || 'BIO_PTO_Project',
+        summaryTableUrl: normalizedSummaryUrl,
+        cnddbLayerUrl: normalizedCnddbUrl || cnddbLayerUrl,
+        bufferLayerUrl: nextBufferUrl,
+        approxCreditsUsed: creditLabel,
+        completedAt: new Date().toISOString(),
+      })
       setAnalysisStatus('ready')
       setAnalysisMessage('Notebook run complete. The app is loading the new summary table.')
       setReportStatus('idle')
+      setReportMessage('')
       setReportLinks({ animals: '', plants: '', excel: '' })
     } catch (error) {
       setAnalysisStatus('error')
@@ -704,9 +759,15 @@ function App() {
 
   function handleResetAnalysis() {
     setSetupCollapsed(false)
+    clearSavedAnalysisRun()
     setStatsTableUrl(defaultStatsTableUrl)
     setCnddbLayerUrl(defaultCnddbLayerUrl)
     setBufferLayerUrl('')
+    setSpeciesResults([])
+    setSelectedSpeciesId(null)
+    setRatingFilter(null)
+    setConservationFilters([])
+    setReviewEdits({})
     setApproxCreditsUsed('3.1')
     setAnalysisStatus('idle')
     setAnalysisMessage('Sample results are loaded for review UI testing.')
