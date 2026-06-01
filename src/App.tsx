@@ -4,15 +4,18 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
+  FolderOpen,
   Layers3,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
+  Plus,
   RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
   Upload,
+  X,
 } from 'lucide-react'
 import './App.css'
 import { getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
@@ -81,7 +84,18 @@ type PortalLayerItem = {
   title: string
   owner: string
   modified?: number
+  type?: string
+  thumbnail?: string
+  thumbnailUrl?: string
   url?: string
+}
+
+type PortalSublayer = {
+  id: number
+  name: string
+  url: string
+  kind: 'layer' | 'table'
+  geometryType?: string
 }
 
 const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || ''
@@ -191,6 +205,14 @@ function formatElevation(low: number | null, high: number | null) {
 function featureLayerZeroUrl(url: string) {
   const trimmed = url.trim()
   return /\/FeatureServer$/i.test(trimmed) ? `${trimmed}/0` : trimmed
+}
+
+function featureServiceUrl(url: string) {
+  return url.trim().replace(/\/FeatureServer\/\d+$/i, '/FeatureServer')
+}
+
+function safeProjectName(value: string) {
+  return value.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project'
 }
 
 function stringifyOutput(value: unknown) {
@@ -420,7 +442,11 @@ function App() {
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
   const [layerBrowserOpen, setLayerBrowserOpen] = useState(false)
   const [portalLayerItems, setPortalLayerItems] = useState<PortalLayerItem[]>([])
+  const [portalLayerSearch, setPortalLayerSearch] = useState('')
+  const [selectedPortalItem, setSelectedPortalItem] = useState<PortalLayerItem | null>(null)
+  const [portalSublayers, setPortalSublayers] = useState<PortalSublayer[]>([])
   const [layerBrowserStatus, setLayerBrowserStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [sublayerStatus, setSublayerStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [layerBrowserMessage, setLayerBrowserMessage] = useState('Sign in to browse ArcGIS feature services.')
   const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
@@ -692,18 +718,21 @@ function App() {
     setLoadedProjectLayerUrl(nextUrl)
   }
 
-  async function handleBrowseProjectLayers() {
+  async function loadPortalLayerItems(searchText = portalLayerSearch) {
     setLayerBrowserOpen(true)
+    setSelectedPortalItem(null)
+    setPortalSublayers([])
     setLayerBrowserStatus('loading')
-    setLayerBrowserMessage('Loading ArcGIS feature services you can access...')
+    setLayerBrowserMessage('Loading your ArcGIS feature services...')
 
     try {
       const signedInUser = await ensureSignedIn()
       const token = await getArcGISToken()
+      const term = searchText.trim()
       const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
       search.searchParams.set('f', 'json')
       search.searchParams.set('token', token)
-      search.searchParams.set('q', `owner:${signedInUser.username} AND type:"Feature Service"`)
+      search.searchParams.set('q', `owner:${signedInUser.username} AND type:"Feature Service"${term ? ` AND ${term}` : ''}`)
       search.searchParams.set('sortField', 'modified')
       search.searchParams.set('sortOrder', 'desc')
       search.searchParams.set('num', '20')
@@ -720,31 +749,83 @@ function App() {
           title: item.title,
           owner: item.owner,
           modified: item.modified,
+          type: item.type,
+          thumbnail: item.thumbnail,
+          thumbnailUrl: item.thumbnail ? `${arcgisPortalUrl}/sharing/rest/content/items/${item.id}/info/${item.thumbnail}?token=${encodeURIComponent(token)}` : '',
           url: item.url,
         }))
 
       setPortalLayerItems(layers)
       setLayerBrowserStatus('ready')
-      setLayerBrowserMessage(layers.length ? 'Select one of your feature services. The app will use layer 0 by default.' : 'No feature services were found in your ArcGIS content.')
+      setLayerBrowserMessage(layers.length ? 'Select a service to inspect its layers, or add the first layer directly.' : 'No feature services were found in your ArcGIS content.')
     } catch (error) {
       setLayerBrowserStatus('error')
       setLayerBrowserMessage(error instanceof Error ? error.message : 'Could not browse ArcGIS feature services.')
     }
   }
 
-  function handleSelectPortalLayer(item: PortalLayerItem) {
-    if (!item.url) {
+  function handleBrowseProjectLayers() {
+    void loadPortalLayerItems()
+  }
+
+  async function handleInspectPortalItem(item: PortalLayerItem) {
+    if (!item.url) return
+    setSelectedPortalItem(item)
+    setSublayerStatus('loading')
+
+    try {
+      const token = await getArcGISToken()
+      const serviceMetadataUrl = new URL(featureServiceUrl(item.url))
+      serviceMetadataUrl.searchParams.set('f', 'json')
+      serviceMetadataUrl.searchParams.set('token', token)
+      const response = await fetch(serviceMetadataUrl.toString())
+      if (!response.ok) throw new Error(`Feature service request failed: ${response.status}`)
+      const data = await response.json() as {
+        error?: { message?: string }
+        layers?: Array<{ id: number; name: string; geometryType?: string }>
+        tables?: Array<{ id: number; name: string }>
+      }
+      if (data.error) throw new Error(data.error.message ?? 'Feature service returned an error.')
+
+      const baseUrl = featureServiceUrl(item.url)
+      const nextSublayers: PortalSublayer[] = [
+        ...(data.layers ?? []).map((layer) => ({
+          id: layer.id,
+          name: layer.name,
+          geometryType: layer.geometryType,
+          kind: 'layer' as const,
+          url: `${baseUrl}/${layer.id}`,
+        })),
+        ...(data.tables ?? []).map((table) => ({
+          id: table.id,
+          name: table.name,
+          kind: 'table' as const,
+          url: `${baseUrl}/${table.id}`,
+        })),
+      ]
+
+      setPortalSublayers(nextSublayers)
+      setSublayerStatus('ready')
+    } catch (error) {
+      setPortalSublayers([])
+      setSublayerStatus('error')
+      setLayerBrowserMessage(error instanceof Error ? error.message : 'Could not read layers for this feature service.')
+    }
+  }
+
+  function handleSelectPortalLayer(item: PortalLayerItem, sublayer?: PortalSublayer) {
+    const nextUrl = sublayer?.url ?? (item.url ? featureLayerZeroUrl(item.url) : '')
+    if (!nextUrl) {
       setLayerBrowserStatus('error')
       setLayerBrowserMessage('That item does not expose a FeatureServer URL.')
       return
     }
-
-    const nextUrl = featureLayerZeroUrl(item.url)
     setProjectLayerUrl(nextUrl)
     setLoadedProjectLayerUrl(nextUrl)
-    setProjectName((current) => current.trim() || item.title.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project')
+    setProjectName((current) => current.trim() || safeProjectName(item.title))
     setLayerBrowserOpen(false)
     setLayerBrowserStatus('idle')
+    setSublayerStatus('idle')
   }
 
   function handleLoadExistingResults() {
@@ -879,7 +960,11 @@ function App() {
     setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
     setLayerBrowserOpen(false)
     setPortalLayerItems([])
+    setPortalLayerSearch('')
+    setSelectedPortalItem(null)
+    setPortalSublayers([])
     setLayerBrowserStatus('idle')
+    setSublayerStatus('idle')
     setLayerBrowserMessage('Sign in to browse ArcGIS feature services.')
     setReportStatus('idle')
     setReportMessage('')
@@ -1014,24 +1099,95 @@ function App() {
             {layerBrowserOpen && (
               <div className="portal-layer-browser">
                 <div className="browser-heading">
-                  <strong>ArcGIS feature services</strong>
-                  <button type="button" onClick={() => setLayerBrowserOpen(false)}>Close</button>
+                  <strong>Browse layers</strong>
+                  <button type="button" aria-label="Close layer browser" onClick={() => setLayerBrowserOpen(false)}><X size={16} /></button>
                 </div>
+                <div className="browser-source-row">
+                  <button className="browser-source-button" type="button">My content <ChevronRight size={14} /></button>
+                </div>
+                <div className="browser-search-row">
+                  <Search size={15} />
+                  <input
+                    value={portalLayerSearch}
+                    onChange={(event) => setPortalLayerSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void loadPortalLayerItems(event.currentTarget.value)
+                      }
+                    }}
+                    placeholder="Search"
+                  />
+                  <button type="button" aria-label="Search layers" onClick={() => void loadPortalLayerItems()}>
+                    <Settings2 size={15} />
+                  </button>
+                </div>
+                <button className="browser-folder-row" type="button">
+                  <FolderOpen size={16} />
+                  All my content
+                  <ChevronRight size={14} />
+                </button>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
-                {portalLayerItems.length > 0 && (
-                  <div className="portal-layer-list">
-                    {portalLayerItems.map((item) => (
-                      <button className="portal-layer-row" type="button" key={item.id} onClick={() => handleSelectPortalLayer(item)}>
-                        <span>
-                          <strong>{item.title}</strong>
-                          <small>{item.owner}{item.modified ? ` - ${new Date(item.modified).toLocaleDateString()}` : ''}</small>
-                        </span>
-                        <ChevronRight size={16} />
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className={`portal-browser-content ${selectedPortalItem ? 'has-detail' : ''}`}>
+                  {portalLayerItems.length > 0 && (
+                    <div className="portal-layer-list">
+                      {portalLayerItems.map((item) => (
+                        <div className={`portal-layer-card ${selectedPortalItem?.id === item.id ? 'selected' : ''}`} key={item.id}>
+                          <button className="portal-layer-main" type="button" onClick={() => void handleInspectPortalItem(item)}>
+                            <span className="item-text">
+                              <strong>{item.title}</strong>
+                              <small>{item.type || 'Feature layer (hosted)'}</small>
+                              <small>{item.modified ? new Date(item.modified).toLocaleDateString() : 'Recently updated'}</small>
+                            </span>
+                            {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" /> : <span className="item-thumb-placeholder"><Layers3 size={18} /></span>}
+                          </button>
+                          <div className="portal-layer-card-footer">
+                            <span className="owner-chip">{item.owner.slice(0, 2).toUpperCase()}</span>
+                            <span>{item.owner}</span>
+                            <button type="button" onClick={() => handleSelectPortalLayer(item)}>
+                              <Plus size={14} />
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {selectedPortalItem && (
+                    <div className="portal-layer-detail">
+                      <div className="detail-browser-heading">
+                        <div>
+                          <strong>{selectedPortalItem.title}</strong>
+                          <small>{selectedPortalItem.type || 'Feature layer (hosted)'}</small>
+                        </div>
+                        <button type="button" aria-label="Close layer details" onClick={() => setSelectedPortalItem(null)}><X size={15} /></button>
+                      </div>
+                      <div className="detail-sharing-row">
+                        <span className="owner-chip">{selectedPortalItem.owner.slice(0, 2).toUpperCase()}</span>
+                        <span>{selectedPortalItem.owner}</span>
+                      </div>
+                      <button className="favorite-button" type="button">Add to favorites</button>
+                      <div className="detail-accordion-row">Description <ChevronRight size={14} /></div>
+                      <div className="detail-accordion-row">Details <ChevronRight size={14} /></div>
+                      <div className="detail-layer-heading">Layers ({portalSublayers.length})</div>
+                      {sublayerStatus === 'loading' && <div className="browser-loading">Reading service layers...</div>}
+                      {sublayerStatus === 'error' && <p className="browser-message error">{layerBrowserMessage}</p>}
+                      <div className="sublayer-list">
+                        {portalSublayers.map((layer) => (
+                          <button className="sublayer-row" type="button" key={`${layer.kind}-${layer.id}`} onClick={() => handleSelectPortalLayer(selectedPortalItem, layer)} disabled={layer.kind === 'table'}>
+                            <span className={`sublayer-symbol ${layer.kind === 'table' ? 'table' : ''}`}>{layer.kind === 'table' ? '#' : layer.geometryType?.includes('Point') ? '+' : layer.geometryType?.includes('Polyline') ? '/' : '[]'}</span>
+                            <span>
+                              <strong>{layer.name}</strong>
+                              <small>{layer.kind === 'table' ? 'Table - not valid for project input' : `${layer.geometryType?.replace('esriGeometry', '') || 'Feature'} layer`}</small>
+                            </span>
+                            <ChevronRight size={15} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <div className="field-grid layer-url-grid">
