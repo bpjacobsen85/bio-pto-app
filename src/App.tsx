@@ -215,6 +215,22 @@ function safeProjectName(value: string) {
   return value.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project'
 }
 
+function reviewEditsStorageKey(summaryTableUrl: string) {
+  return `bioPto:reviewEdits:${summaryTableUrl.trim()}`
+}
+
+function addTokenToUrl(url: string, token: string) {
+  if (!url.trim()) return ''
+  try {
+    const nextUrl = new URL(url)
+    nextUrl.searchParams.set('token', token)
+    return nextUrl.toString()
+  } catch {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}token=${encodeURIComponent(token)}`
+  }
+}
+
 function stringifyOutput(value: unknown) {
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2) ?? ''
@@ -222,8 +238,20 @@ function stringifyOutput(value: unknown) {
 
 function approximateCreditLabel(value: unknown) {
   const text = stringifyOutput(value)
-  const match = text.match(/"?(?:total|cost|credits?|approx_credits_used)"?\s*[:=]\s*([0-9.]+)/i)
-  return match?.[1] ?? text.slice(0, 80)
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) as unknown : value
+    if (parsed && typeof parsed === 'object') {
+      const estimated = (parsed as { estimated_credits?: Record<string, unknown> }).estimated_credits
+      const runTotal = estimated?.estimated_run_total_excluding_storage
+      if (typeof runTotal === 'number') return runTotal.toFixed(2)
+      const runtime = estimated?.notebook_runtime
+      if (typeof runtime === 'number') return runtime.toFixed(2)
+    }
+  } catch {
+    // Fall back to regex parsing below.
+  }
+  const match = text.match(/"?(?:estimated_run_total_excluding_storage|total|cost|credits?|approx_credits_used)"?\s*[:=]\s*([0-9.]+)/i)
+  return match?.[1] ?? 'See run details'
 }
 
 function formatYear(value: number | null) {
@@ -588,6 +616,21 @@ function App() {
       alive = false
     }
   }, [statsTableUrl, user])
+
+  useEffect(() => {
+    if (!statsTableUrl.trim()) return
+    try {
+      const raw = window.localStorage.getItem(reviewEditsStorageKey(statsTableUrl))
+      setReviewEdits(raw ? JSON.parse(raw) as Record<number, SpeciesReviewEdit> : {})
+    } catch {
+      setReviewEdits({})
+    }
+  }, [statsTableUrl])
+
+  useEffect(() => {
+    if (!statsTableUrl.trim() || Object.keys(reviewEdits).length === 0) return
+    window.localStorage.setItem(reviewEditsStorageKey(statsTableUrl), JSON.stringify(reviewEdits))
+  }, [reviewEdits, statsTableUrl])
 
   const listingCodeOptions = useMemo(() => Array.from(new Set(
     speciesResults
@@ -1023,6 +1066,24 @@ function App() {
     }
   }
 
+  async function handleOpenReportLink(url: string) {
+    if (!url) return
+    const reportWindow = window.open('', '_blank')
+    try {
+      const token = await getArcGISToken()
+      const signedUrl = addTokenToUrl(url, token)
+      if (reportWindow) {
+        reportWindow.location.href = signedUrl
+      } else {
+        window.open(signedUrl, '_blank', 'noopener,noreferrer')
+      }
+    } catch (error) {
+      if (reportWindow) reportWindow.close()
+      setReportStatus('error')
+      setReportMessage(error instanceof Error ? error.message : 'Could not open report document.')
+    }
+  }
+
   function toggleConservationFilter(filter: ConservationFilter) {
     setConservationFilters((current) => (
       current.includes(filter)
@@ -1328,17 +1389,6 @@ function App() {
           <div className="map-canvas">
             <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
-          {speciesResults.length > 0 && (
-            <div className="legend-panel">
-              <h3>Potential</h3>
-              {ratingCounts.map((item) => (
-                <div className="legend-row" key={item.label}>
-                  <span className={`legend-swatch ${item.label.toLowerCase().replaceAll(' ', '-')}`} />
-                  <span>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
 
         <aside className="results-panel" aria-label="Analysis results">
@@ -1395,11 +1445,11 @@ function App() {
             {reportMessage && <span className={`report-message ${reportStatus === 'error' ? 'error' : ''}`}>{reportMessage}</span>}
             {reportStatus === 'ready' && (
               <div className="report-download-cards">
-                <button type="button" className="word-download-card" onClick={() => reportLinks.animals && window.open(reportLinks.animals, '_blank', 'noopener,noreferrer')}>
+                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.animals)}>
                   <FileText size={20} />
                   <span><strong>Animals PTO</strong><small>Word document</small></span>
                 </button>
-                <button type="button" className="word-download-card" onClick={() => reportLinks.plants && window.open(reportLinks.plants, '_blank', 'noopener,noreferrer')}>
+                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.plants)}>
                   <FileText size={20} />
                   <span><strong>Plants PTO</strong><small>Word document</small></span>
                 </button>

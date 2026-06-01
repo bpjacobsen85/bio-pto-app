@@ -1031,6 +1031,9 @@ input {
   margin-top: 6px;
   font-size: 26px;
   color: #17202a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .high { color: #d64545; }
@@ -1118,6 +1121,11 @@ input {
   background: #f7fbff;
   color: #1b5e91;
   text-align: left;
+}
+
+.word-download-card:hover {
+  background: #eef7ff;
+  border-color: #75abd2;
 }
 
 .word-download-card span {
@@ -2070,7 +2078,7 @@ input {
 
 /* Results workspace keeps the map visible after setup/model execution. */
 .workspace.results-workspace.setup-collapsed {
-  grid-template-columns: 52px minmax(520px, 1fr) minmax(430px, 520px);
+  grid-template-columns: 52px minmax(360px, 38vw) minmax(760px, 1fr);
 }
 
 .workspace.results-workspace.setup-collapsed .map-stage {
@@ -2079,17 +2087,23 @@ input {
 
 .workspace.results-workspace.setup-collapsed .results-panel {
   grid-column: auto;
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(420px, 1.1fr) minmax(340px, .9fr);
+  grid-auto-rows: min-content;
+  gap: 12px;
+  align-content: start;
   overflow: auto;
   background: #fbfcfd;
+  padding: 12px;
 }
 
 .workspace.results-workspace.setup-collapsed .review-header {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   padding: 12px;
   border: 1px solid #dce3ea;
   border-radius: 8px;
@@ -2097,32 +2111,48 @@ input {
 }
 
 .workspace.results-workspace.setup-collapsed .run-status {
+  grid-column: 1 / -1;
   display: flex;
+  margin-bottom: 0;
 }
 
 .workspace.results-workspace.setup-collapsed .summary-grid {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(8, minmax(78px, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.workspace.results-workspace.setup-collapsed .summary-card {
+  min-height: 58px;
+  padding: 8px 9px;
+}
+
+.workspace.results-workspace.setup-collapsed .summary-card strong {
+  margin-top: 3px;
+  font-size: 20px;
 }
 
 .workspace.results-workspace.setup-collapsed .report-action-row {
-  margin-bottom: 12px;
+  grid-column: 1 / -1;
+  margin-bottom: 0;
 }
 
 .workspace.results-workspace.setup-collapsed .table-card,
 .workspace.results-workspace.setup-collapsed .detail-panel {
-  min-height: auto;
-  margin-bottom: 12px;
+  min-height: 0;
+  margin-bottom: 0;
 }
 
 .workspace.results-workspace.setup-collapsed .table-card {
   display: block;
+  grid-column: 1;
+  overflow: hidden;
 }
 
 .workspace.results-workspace.setup-collapsed .selected-species-card {
-  display: grid;
+  display: none;
 }
 
 .workspace.results-workspace.setup-collapsed .species-table-header,
@@ -2132,13 +2162,13 @@ input {
 }
 
 .workspace.results-workspace.setup-collapsed .species-list {
-  max-height: 44vh;
+  max-height: calc(100vh - 520px);
   min-height: auto;
   border-top: 1px solid #edf1f5;
 }
 
 .workspace.results-workspace.setup-collapsed .species-row {
-  grid-template-columns: 92px minmax(0, 1fr) 58px;
+  grid-template-columns: 92px minmax(0, 1fr) 70px;
   min-height: 66px;
   gap: 8px;
 }
@@ -2149,8 +2179,10 @@ input {
 }
 
 .workspace.results-workspace.setup-collapsed .detail-panel {
-  overflow: visible;
+  grid-column: 2;
+  overflow: auto;
   padding: 14px;
+  max-height: calc(100vh - 338px);
 }
 
 .workspace.results-workspace.setup-collapsed .detail-heading {

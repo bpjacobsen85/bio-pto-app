@@ -139,7 +139,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         url: bufferLayerUrl.trim(),
         title: 'PTO buffer',
         outFields: ['*'],
-        opacity: 0.28,
+        opacity: 0.68,
         popupEnabled: true,
         popupTemplate: {
           title: 'PTO buffer',
@@ -149,8 +149,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
           type: 'simple',
           symbol: {
             type: 'simple-fill',
-            color: [27, 108, 168, 0.18],
-            outline: { color: [27, 108, 168, 0.9], width: 2 },
+            color: [0, 145, 190, 0.22],
+            outline: { color: [0, 92, 155, 1], width: 3 },
           },
         },
       })
