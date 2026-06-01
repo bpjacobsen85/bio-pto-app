@@ -725,9 +725,10 @@ function App() {
 
   async function handleRunAnalysis() {
     if (analysisStatus === 'submitting' || analysisStatus === 'running') return
-    if (!loadedProjectLayerUrl.trim()) {
+    const projectInput = projectSketch.projectInput ?? (loadedProjectLayerUrl.trim() ? { url: loadedProjectLayerUrl.trim() } : null)
+    if (!projectInput) {
       setAnalysisStatus('error')
-      setAnalysisMessage('Load a project feature service layer before running the notebook tool.')
+      setAnalysisMessage('Draw a project feature or load a project feature service layer before running the notebook tool.')
       return
     }
 
@@ -743,7 +744,6 @@ function App() {
     try {
       await ensureSignedIn()
       const token = await getArcGISToken()
-      const projectInput = projectSketch.projectInput ?? { url: loadedProjectLayerUrl.trim() }
       const job = await runNotebookWebTool(
         runModelToolUrl,
         token,
@@ -812,7 +812,7 @@ function App() {
     setRatingFilter(null)
     setConservationFilters([])
     setReviewEdits({})
-    setApproxCreditsUsed('3.1')
+    setApproxCreditsUsed('0')
     setAnalysisStatus('idle')
     setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
     setReportStatus('idle')
