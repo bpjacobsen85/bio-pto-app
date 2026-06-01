@@ -458,7 +458,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>('idle')
   const [analysisMessage, setAnalysisMessage] = useState('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
-  const [approxCreditsUsed, setApproxCreditsUsed] = useState('0')
+  const [, setApproxCreditsUsed] = useState('0')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
@@ -1421,10 +1421,6 @@ function App() {
             <div className="summary-card neutral">
               <span>Total Species</span>
               <strong>{speciesResults.length || totalSpecies}</strong>
-            </div>
-            <div className="summary-card neutral">
-              <span>Approx. Credits</span>
-              <strong>{approxCreditsUsed}</strong>
             </div>
             <div className="summary-card neutral review-progress-card">
               <span>Reviewed</span>
