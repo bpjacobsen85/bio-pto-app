@@ -76,7 +76,7 @@ type PtoCriteria = {
   lowDistance: number
 }
 
-const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/Test_Tool_Input/FeatureServer/0'
+const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || ''
 const defaultCnddbLayerUrl = ''
 const defaultStatsTableUrl = ''
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
@@ -405,7 +405,7 @@ function App() {
   const [user, setUser] = useState<ArcgisUser | null>(null)
   const [authStatus, setAuthStatus] = useState<'idle' | 'checking' | 'signing-in' | 'error'>('checking')
   const [authMessage, setAuthMessage] = useState('')
-  const [activeMapTool, setActiveMapTool] = useState<MapTool>('layers')
+  const [activeMapTool, setActiveMapTool] = useState<MapTool>(null)
   const [projectName, setProjectName] = useState(savedAnalysisRun?.projectName ?? 'BIO_PTO_Test')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
@@ -419,7 +419,7 @@ function App() {
   const [statsMessage, setStatsMessage] = useState(savedAnalysisRun ? 'Loading saved notebook summary table...' : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(savedAnalysisRun ? 'ready' : 'idle')
   const [analysisMessage, setAnalysisMessage] = useState(savedAnalysisRun ? `Loaded saved notebook output from ${new Date(savedAnalysisRun.completedAt).toLocaleString()}.` : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
-  const [approxCreditsUsed, setApproxCreditsUsed] = useState(savedAnalysisRun?.approxCreditsUsed ?? '3.1')
+  const [approxCreditsUsed, setApproxCreditsUsed] = useState(savedAnalysisRun?.approxCreditsUsed ?? '0')
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<number | null>(null)
   const [speciesTypeFilter, setSpeciesTypeFilter] = useState<SpeciesTypeFilter>('All')
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
