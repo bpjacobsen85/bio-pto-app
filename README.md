@@ -24,7 +24,8 @@ Copy `.env.example` to `.env.local` and fill these in when available:
 ```text
 VITE_ARCGIS_PORTAL_URL=https://www.arcgis.com
 VITE_ARCGIS_CLIENT_ID=<ArcGIS OAuth app client ID>
-VITE_NOTEBOOK_TOOL_URL=<Notebook web tool REST URL>
+VITE_RUN_MODEL_TOOL_URL=<BIO_PTO_Run_Model_ONLY GPServer URL>
+VITE_REPORT_NOTEBOOK_TOOL_URL=<BIO_PTO_Generate_Report_ONLY GPServer URL>
 VITE_RUN_HISTORY_TABLE_URL=<BIO_PTO_Run_History hosted table URL>
 ```
 
