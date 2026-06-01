@@ -468,6 +468,10 @@ function getRuleSummary(species?: SpeciesResult) {
   return `${species.rating} Rule`
 }
 
+function finalPotentialForSpecies(species: SpeciesResult, edits: Record<number, SpeciesReviewEdit>): Rating {
+  return edits[species.objectId]?.rating ?? species.reviewedPotential ?? species.rating
+}
+
 function getSpeciesType(taxonGroup: string, elementType: string): Exclude<SpeciesTypeFilter, 'All'> {
   const group = taxonGroup.toLowerCase()
   const plantGroups = ['dicot', 'monocot', 'fern', 'gymnosperm', 'conifer', 'moss', 'lichen', 'bryophyte']
@@ -739,24 +743,24 @@ function App() {
 
   const filteredSpeciesResults = useMemo(() => speciesResults.filter((row) => (
     (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
-    && (!ratingFilter || row.rating === ratingFilter)
+    && (!ratingFilter || finalPotentialForSpecies(row, reviewEdits) === ratingFilter)
     && (
       conservationFilters.length === 0
       || conservationFilters.some((filter) => matchesConservationFilter(getListingCodes(row.listings), filter))
     )
-  )), [conservationFilters, ratingFilter, speciesResults, speciesTypeFilter])
+  )), [conservationFilters, ratingFilter, reviewEdits, speciesResults, speciesTypeFilter])
 
   const ratingCounts = useMemo(() => ratingOrder.map((label) => ({
     label,
     count: speciesResults.filter((row) => (
-      row.rating === label
+      finalPotentialForSpecies(row, reviewEdits) === label
       && (speciesTypeFilter === 'All' || row.speciesType === speciesTypeFilter)
       && (
         conservationFilters.length === 0
         || conservationFilters.some((filter) => matchesConservationFilter(getListingCodes(row.listings), filter))
       )
     )).length,
-  })), [conservationFilters, speciesResults, speciesTypeFilter])
+  })), [conservationFilters, reviewEdits, speciesResults, speciesTypeFilter])
 
   const selectedSpecies = filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId) ?? filteredSpeciesResults[0]
   const totalSpecies = filteredSpeciesResults.length
@@ -1134,6 +1138,8 @@ function App() {
       reviewed_potential: nextEdit.rating ?? species.reviewedPotential ?? species.rating,
       final_report_description: nextEdit.habitatSummary ?? species.finalReportDescription ?? buildFinalReportDescription(species),
       reviewed_by: user?.username ?? '',
+      last_edited_by: user?.username ?? '',
+      last_edited_date: Date.now(),
     }
     if (nextEdit.status === 'Reviewed') {
       attributes.reviewed_date = Date.now()
@@ -1198,17 +1204,52 @@ function App() {
         getOptionalOutput(['PTO_Plants_Word_Doc_Link', 'PTO_Plants_Word_Doc', 'PTO_Plants_Doc_Link', 'PTO_Plants_Doc']),
       ])
 
-      const signedReportLink = (link: string) => link ? addTokenToUrl(normalizeReportDownloadUrl(link), token) : ''
       setReportLinks({
         excel: '',
-        animals: signedReportLink(animalsLink),
-        plants: signedReportLink(plantsLink),
+        animals: animalsLink,
+        plants: plantsLink,
       })
       setReportStatus('ready')
       setReportMessage(animalsLink || plantsLink ? 'Report package ready.' : 'Report generated, but the app could not read the Word document output links.')
     } catch (error) {
       setReportStatus('error')
       setReportMessage(error instanceof Error ? error.message : 'Report generation failed.')
+    }
+  }
+
+  async function handleDownloadReportDocument(url: string, fileName: string) {
+    if (!url) return
+    setReportStatus('generating')
+    setReportMessage(`Downloading ${fileName}...`)
+
+    try {
+      const token = await getArcGISToken()
+      const signedUrl = addTokenToUrl(normalizeReportDownloadUrl(url), token)
+      const response = await fetch(signedUrl)
+      if (!response.ok) throw new Error(`ArcGIS download request failed (${response.status}).`)
+
+      const contentType = response.headers.get('content-type') ?? ''
+      if (contentType.includes('application/json')) {
+        const data = await response.json() as { error?: { message?: string; details?: string[] } }
+        throw new Error([data.error?.message, ...(data.error?.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS returned JSON instead of the Word document.')
+      }
+
+      const blob = await response.blob()
+      const objectUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000)
+      setReportStatus('ready')
+      setReportMessage('Report downloaded.')
+    } catch (error) {
+      setReportStatus('error')
+      setReportMessage(error instanceof Error
+        ? `${error.message} You can still download the document from ArcGIS Online Content.`
+        : 'Could not download the report document. You can still download it from ArcGIS Online Content.')
     }
   }
 
@@ -1530,16 +1571,16 @@ function App() {
               {reportStatus === 'ready' && (reportLinks.animals || reportLinks.plants) && (
                 <div className="header-report-links" aria-label="Generated report downloads">
                   {reportLinks.animals && (
-                    <a href={reportLinks.animals} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`}>
+                    <button type="button" onClick={() => void handleDownloadReportDocument(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
                       <FileText size={15} />
                       Animals PTO
-                    </a>
+                    </button>
                   )}
                   {reportLinks.plants && (
-                    <a href={reportLinks.plants} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`}>
+                    <button type="button" onClick={() => void handleDownloadReportDocument(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
                       <FileText size={15} />
                       Plants PTO
-                    </a>
+                    </button>
                   )}
                 </div>
               )}
@@ -1585,16 +1626,16 @@ function App() {
             {reportStatus === 'ready' && (
               <div className="report-download-cards">
                 {reportLinks.animals && (
-                  <a className="word-download-card" href={reportLinks.animals} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`}>
+                  <button type="button" className="word-download-card" onClick={() => void handleDownloadReportDocument(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
                     <FileText size={20} />
                     <span><strong>Animals PTO</strong><small>Word document</small></span>
-                  </a>
+                  </button>
                 )}
                 {reportLinks.plants && (
-                  <a className="word-download-card" href={reportLinks.plants} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`}>
+                  <button type="button" className="word-download-card" onClick={() => void handleDownloadReportDocument(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
                     <FileText size={20} />
                     <span><strong>Plants PTO</strong><small>Word document</small></span>
-                  </a>
+                  </button>
                 )}
               </div>
             )}
@@ -1663,8 +1704,8 @@ function App() {
             </div>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
-                <button className={`species-row ${row.rating.toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
-                  <RatingPill rating={row.rating} />
+                <button className={`species-row ${finalPotentialForSpecies(row, reviewEdits).toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
+                  <RatingPill rating={finalPotentialForSpecies(row, reviewEdits)} />
                   <span className="species-name">
                     <strong>{row.common}</strong>
                     <em>{row.scientific}</em>

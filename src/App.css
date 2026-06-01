@@ -1023,7 +1023,7 @@ input {
   gap: 6px;
 }
 
-.review-actions .header-report-links a {
+.review-actions .header-report-links button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1036,7 +1036,6 @@ input {
   color: #133b5c;
   font-size: 13px;
   font-weight: 850;
-  text-decoration: none;
 }
 
 .run-status {
@@ -1183,7 +1182,6 @@ input {
   background: #f7fbff;
   color: #1b5e91;
   text-align: left;
-  text-decoration: none;
 }
 
 .word-download-card:hover {
