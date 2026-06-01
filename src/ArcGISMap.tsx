@@ -131,9 +131,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   useEffect(() => {
     if (!containerRef.current || !layerListRef.current || !sketchRef.current) return
 
-    const projectLayer = new GraphicsLayer({ title: 'Project input' })
-    const resultLayer = new GraphicsLayer({ title: 'PTO results' })
-    const sketchLayer = new GraphicsLayer({ title: 'Project sketch input' })
+    const projectLayer = new GraphicsLayer({ title: 'Project input', listMode: 'hide' })
+    const resultLayer = new GraphicsLayer({ title: 'PTO results', listMode: 'hide' })
+    const sketchLayer = new GraphicsLayer({ title: 'Project sketch input', listMode: 'hide' })
     const bufferOutputLayer = bufferLayerUrl?.trim()
       ? new FeatureLayer({
         url: bufferLayerUrl.trim(),

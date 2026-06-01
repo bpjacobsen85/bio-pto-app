@@ -1573,6 +1573,7 @@ function App() {
 
         <section className="map-stage" aria-label="Map preview">
           <div className="map-toolbar">
+            <button className="tool-button" type="button" onClick={handleBrowseProjectLayers}><Plus size={17} /> Add data</button>
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
             {!isReviewingResults && (
               <button className={`tool-button ${activeMapTool === 'sketch' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('sketch')}><PencilLine size={17} /> Sketch</button>
