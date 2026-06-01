@@ -975,6 +975,11 @@ function App() {
     void loadPortalLayerItems()
   }
 
+  function handleBrowseAllPortalContent() {
+    setPortalLayerSearch('')
+    void loadPortalLayerItems('', portalSearchScope)
+  }
+
   async function handleInspectPortalItem(item: PortalLayerItem) {
     if (!item.url) return
     setSelectedPortalItem(item)
@@ -1454,10 +1459,11 @@ function App() {
                     <Settings2 size={15} />
                   </button>
                 </div>
-                <div className="browser-folder-row" aria-label="Layer search source">
+                <button className="browser-folder-row" type="button" onClick={handleBrowseAllPortalContent}>
                   <FolderOpen size={16} />
                   {portalSearchScope === 'mine' ? 'All my content' : portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}
-                </div>
+                  <ChevronRight size={14} />
+                </button>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
                 <div className={`portal-browser-content ${selectedPortalItem ? 'has-detail' : ''}`}>

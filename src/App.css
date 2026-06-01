@@ -344,16 +344,21 @@ h3 {
   min-height: 38px;
   margin: 10px 12px 8px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border: 1px solid #d9e1e8;
-  background: #f7fafc;
-  color: #536272;
+  border: 1px solid #c8d3de;
+  background: #fff;
+  color: #263542;
   font-size: 13px;
   font-weight: 650;
   text-align: left;
+}
+
+.browser-folder-row:hover {
+  border-color: #7fb1d4;
+  background: #f5fbff;
 }
 
 .browser-message,
