@@ -104,6 +104,11 @@ type PortalLayerItem = {
   url?: string
 }
 
+type PortalFolder = {
+  id: string
+  title: string
+}
+
 type PortalSublayer = {
   id: number
   name: string
@@ -601,6 +606,8 @@ function App() {
   const [layerBrowserMode, setLayerBrowserMode] = useState<LayerBrowserMode>('project-input')
   const [portalSearchScope, setPortalSearchScope] = useState<PortalSearchScope>('mine')
   const [portalLayerItems, setPortalLayerItems] = useState<PortalLayerItem[]>([])
+  const [portalFolders, setPortalFolders] = useState<PortalFolder[]>([])
+  const [selectedPortalFolderId, setSelectedPortalFolderId] = useState('all')
   const [portalLayerSearch, setPortalLayerSearch] = useState('')
   const [selectedPortalItem, setSelectedPortalItem] = useState<PortalLayerItem | null>(null)
   const [openPortalDetailSection, setOpenPortalDetailSection] = useState<'description' | 'details' | null>(null)
@@ -920,7 +927,24 @@ function App() {
     setLoadedProjectLayerUrl(nextUrl)
   }
 
-  async function loadPortalLayerItems(searchText = portalLayerSearch, scope = portalSearchScope) {
+  function mapPortalItem(item: PortalLayerItem, token: string): PortalLayerItem {
+    return {
+      id: item.id,
+      title: item.title,
+      owner: item.owner,
+      modified: item.modified,
+      type: item.type,
+      snippet: item.snippet,
+      description: item.description,
+      access: item.access,
+      numViews: item.numViews,
+      thumbnail: item.thumbnail,
+      thumbnailUrl: item.thumbnail ? `${arcgisPortalUrl}/sharing/rest/content/items/${item.id}/info/${item.thumbnail}?token=${encodeURIComponent(token)}` : '',
+      url: item.url,
+    }
+  }
+
+  async function loadPortalLayerItems(searchText = portalLayerSearch, scope = portalSearchScope, folderId = selectedPortalFolderId) {
     setLayerBrowserOpen(true)
     setSelectedPortalItem(null)
     setPortalSublayers([])
@@ -931,41 +955,61 @@ function App() {
       const signedInUser = await ensureSignedIn()
       const token = await getArcGISToken()
       const term = searchText.trim()
-      const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
-      const termClause = term ? ` AND ${term}` : ''
-      const scopeClause = scope === 'mine'
-        ? `owner:${signedInUser.username}`
-        : scope === 'organization' && signedInUser.orgId
-          ? `orgid:${signedInUser.orgId}`
-          : ''
-      search.searchParams.set('f', 'json')
-      search.searchParams.set('token', token)
-      search.searchParams.set('q', `${scopeClause ? `${scopeClause} AND ` : ''}type:"Feature Service"${termClause}`)
-      search.searchParams.set('sortField', 'modified')
-      search.searchParams.set('sortOrder', 'desc')
-      search.searchParams.set('num', '20')
 
-      const response = await fetch(search.toString())
-      if (!response.ok) throw new Error(`ArcGIS search failed: ${response.status}`)
-      const data = await response.json() as { error?: { message?: string }; results?: Array<PortalLayerItem> }
-      if (data.error) throw new Error(data.error.message ?? 'ArcGIS search returned an error.')
+      if (scope === 'mine') {
+        const foldersUrl = new URL(`${arcgisPortalUrl}/sharing/rest/content/users/${encodeURIComponent(signedInUser.username)}`)
+        foldersUrl.searchParams.set('f', 'json')
+        foldersUrl.searchParams.set('token', token)
+        const foldersResponse = await fetch(foldersUrl.toString())
+        if (foldersResponse.ok) {
+          const foldersData = await foldersResponse.json() as { folders?: PortalFolder[] }
+          setPortalFolders((foldersData.folders ?? []).map((folder) => ({ id: folder.id, title: folder.title })).sort((a, b) => a.title.localeCompare(b.title)))
+        }
+      } else {
+        setPortalFolders([])
+        setSelectedPortalFolderId('all')
+      }
 
-      const layers = (data.results ?? [])
-        .filter((item) => item.url)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          owner: item.owner,
-          modified: item.modified,
-          type: item.type,
-          snippet: item.snippet,
-          description: item.description,
-          access: item.access,
-          numViews: item.numViews,
-          thumbnail: item.thumbnail,
-          thumbnailUrl: item.thumbnail ? `${arcgisPortalUrl}/sharing/rest/content/items/${item.id}/info/${item.thumbnail}?token=${encodeURIComponent(token)}` : '',
-          url: item.url,
-        }))
+      let layers: PortalLayerItem[]
+      if (scope === 'mine' && folderId !== 'all') {
+        const folderContent = new URL(`${arcgisPortalUrl}/sharing/rest/content/users/${encodeURIComponent(signedInUser.username)}/${encodeURIComponent(folderId)}`)
+        folderContent.searchParams.set('f', 'json')
+        folderContent.searchParams.set('token', token)
+        folderContent.searchParams.set('num', '100')
+        const response = await fetch(folderContent.toString())
+        if (!response.ok) throw new Error(`ArcGIS folder request failed: ${response.status}`)
+        const data = await response.json() as { error?: { message?: string }; items?: Array<PortalLayerItem> }
+        if (data.error) throw new Error(data.error.message ?? 'ArcGIS folder returned an error.')
+        const loweredTerm = term.toLowerCase()
+        layers = (data.items ?? [])
+          .filter((item) => item.url && item.type === 'Feature Service')
+          .filter((item) => !loweredTerm || item.title.toLowerCase().includes(loweredTerm))
+          .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
+          .slice(0, 20)
+          .map((item) => mapPortalItem(item, token))
+      } else {
+        const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
+        const termClause = term ? ` AND ${term}` : ''
+        const scopeClause = scope === 'mine'
+          ? `owner:${signedInUser.username}`
+          : scope === 'organization' && signedInUser.orgId
+            ? `orgid:${signedInUser.orgId}`
+            : ''
+        search.searchParams.set('f', 'json')
+        search.searchParams.set('token', token)
+        search.searchParams.set('q', `${scopeClause ? `${scopeClause} AND ` : ''}type:"Feature Service"${termClause}`)
+        search.searchParams.set('sortField', 'modified')
+        search.searchParams.set('sortOrder', 'desc')
+        search.searchParams.set('num', '20')
+
+        const response = await fetch(search.toString())
+        if (!response.ok) throw new Error(`ArcGIS search failed: ${response.status}`)
+        const data = await response.json() as { error?: { message?: string }; results?: Array<PortalLayerItem> }
+        if (data.error) throw new Error(data.error.message ?? 'ArcGIS search returned an error.')
+        layers = (data.results ?? [])
+          .filter((item) => item.url)
+          .map((item) => mapPortalItem(item, token))
+      }
 
       setPortalLayerItems(layers)
       setLayerBrowserStatus('ready')
@@ -979,13 +1023,26 @@ function App() {
   function handleBrowseProjectLayers() {
     setLayerBrowserMode('project-input')
     setPortalSearchScope('mine')
-    void loadPortalLayerItems()
+    setSelectedPortalFolderId('all')
+    void loadPortalLayerItems(portalLayerSearch, 'mine', 'all')
   }
 
   function handleBrowseMapLayers() {
     setLayerBrowserMode('map-layer')
     setPortalSearchScope('mine')
-    void loadPortalLayerItems()
+    setSelectedPortalFolderId('all')
+    void loadPortalLayerItems(portalLayerSearch, 'mine', 'all')
+  }
+
+  function handlePortalSourceChange(nextScope: PortalSearchScope) {
+    setPortalSearchScope(nextScope)
+    setSelectedPortalFolderId('all')
+    void loadPortalLayerItems(portalLayerSearch, nextScope, 'all')
+  }
+
+  function handlePortalFolderChange(nextFolderId: string) {
+    setSelectedPortalFolderId(nextFolderId)
+    void loadPortalLayerItems(portalLayerSearch, portalSearchScope, nextFolderId)
   }
 
   function handleOpenSelectedPortalItem() {
@@ -1465,9 +1522,7 @@ function App() {
                     className="browser-source-select"
                     value={portalSearchScope}
                     onChange={(event) => {
-                      const nextScope = event.target.value as PortalSearchScope
-                      setPortalSearchScope(nextScope)
-                      void loadPortalLayerItems(portalLayerSearch, nextScope)
+                      handlePortalSourceChange(event.target.value as PortalSearchScope)
                     }}
                   >
                     <option value="mine">My content</option>
@@ -1492,9 +1547,22 @@ function App() {
                     <Settings2 size={15} />
                   </button>
                 </div>
-                <div className="browser-folder-row" aria-label="Current layer search source">
+                <div className={`browser-folder-row ${portalSearchScope === 'mine' ? 'has-select' : ''}`} aria-label="Current layer search folder">
                   <FolderOpen size={16} />
-                  <span>{portalSearchScope === 'mine' ? 'Showing my content' : portalSearchScope === 'organization' ? 'Showing organization content' : 'Showing ArcGIS Online content'}</span>
+                  {portalSearchScope === 'mine' ? (
+                    <select
+                      aria-label="Content folder"
+                      value={selectedPortalFolderId}
+                      onChange={(event) => handlePortalFolderChange(event.target.value)}
+                    >
+                      <option value="all">All my content</option>
+                      {portalFolders.map((folder) => (
+                        <option value={folder.id} key={folder.id}>{folder.title}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span>{portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}</span>
+                  )}
                 </div>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}

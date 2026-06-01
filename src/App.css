@@ -356,6 +356,26 @@ h3 {
   text-align: left;
 }
 
+.browser-folder-row.has-select {
+  background: #fff;
+  color: #263542;
+}
+
+.browser-folder-row select {
+  min-width: 0;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+
+.browser-folder-row select:focus {
+  outline: 0;
+}
+
 .browser-message,
 .browser-loading {
   padding: 8px 12px;
