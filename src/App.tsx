@@ -1198,58 +1198,17 @@ function App() {
         getOptionalOutput(['PTO_Plants_Word_Doc_Link', 'PTO_Plants_Word_Doc', 'PTO_Plants_Doc_Link', 'PTO_Plants_Doc']),
       ])
 
+      const signedReportLink = (link: string) => link ? addTokenToUrl(normalizeReportDownloadUrl(link), token) : ''
       setReportLinks({
         excel: '',
-        animals: animalsLink,
-        plants: plantsLink,
+        animals: signedReportLink(animalsLink),
+        plants: signedReportLink(plantsLink),
       })
       setReportStatus('ready')
       setReportMessage(animalsLink || plantsLink ? 'Report package ready.' : 'Report generated, but the app could not read the Word document output links.')
     } catch (error) {
       setReportStatus('error')
       setReportMessage(error instanceof Error ? error.message : 'Report generation failed.')
-    }
-  }
-
-  async function handleOpenReportLink(url: string, fileName: string) {
-    if (!url) return
-    try {
-      const token = await getArcGISToken()
-      const signedUrl = addTokenToUrl(normalizeReportDownloadUrl(url), token)
-      setReportMessage(`Downloading ${fileName}...`)
-
-      try {
-        const response = await fetch(signedUrl)
-        if (!response.ok) throw new Error(`ArcGIS download request failed (${response.status}).`)
-        const contentType = response.headers.get('content-type') ?? ''
-        if (contentType.includes('application/json')) {
-          const data = await response.json() as { error?: { message?: string; details?: string[] } }
-          throw new Error([data.error?.message, ...(data.error?.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS returned JSON instead of the Word document.')
-        }
-
-        const blob = await response.blob()
-        const objectUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = fileName
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000)
-      } catch {
-        const link = document.createElement('a')
-        link.href = signedUrl
-        link.target = '_blank'
-        link.rel = 'noopener noreferrer'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-      }
-      setReportStatus('ready')
-      setReportMessage('Report package ready.')
-    } catch (error) {
-      setReportStatus('error')
-      setReportMessage(error instanceof Error ? error.message : 'Could not open report document.')
     }
   }
 
@@ -1571,16 +1530,16 @@ function App() {
               {reportStatus === 'ready' && (reportLinks.animals || reportLinks.plants) && (
                 <div className="header-report-links" aria-label="Generated report downloads">
                   {reportLinks.animals && (
-                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
+                    <a href={reportLinks.animals} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`}>
                       <FileText size={15} />
                       Animals PTO
-                    </button>
+                    </a>
                   )}
                   {reportLinks.plants && (
-                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
+                    <a href={reportLinks.plants} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`}>
                       <FileText size={15} />
                       Plants PTO
-                    </button>
+                    </a>
                   )}
                 </div>
               )}
@@ -1625,14 +1584,18 @@ function App() {
             {reportMessage && <span className={`report-message ${reportStatus === 'error' ? 'error' : ''}`}>{reportMessage}</span>}
             {reportStatus === 'ready' && (
               <div className="report-download-cards">
-                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.animals, `${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`)}>
-                  <FileText size={20} />
-                  <span><strong>Animals PTO</strong><small>Word document</small></span>
-                </button>
-                <button type="button" className="word-download-card" onClick={() => void handleOpenReportLink(reportLinks.plants, `${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`)}>
-                  <FileText size={20} />
-                  <span><strong>Plants PTO</strong><small>Word document</small></span>
-                </button>
+                {reportLinks.animals && (
+                  <a className="word-download-card" href={reportLinks.animals} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Animals_PTO.docx`}>
+                    <FileText size={20} />
+                    <span><strong>Animals PTO</strong><small>Word document</small></span>
+                  </a>
+                )}
+                {reportLinks.plants && (
+                  <a className="word-download-card" href={reportLinks.plants} target="_blank" rel="noopener noreferrer" download={`${safeProjectName(projectName || 'BIO_PTO')}_Plants_PTO.docx`}>
+                    <FileText size={20} />
+                    <span><strong>Plants PTO</strong><small>Word document</small></span>
+                  </a>
+                )}
               </div>
             )}
           </div>

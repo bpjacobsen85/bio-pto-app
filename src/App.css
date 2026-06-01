@@ -1023,10 +1023,20 @@ input {
   gap: 6px;
 }
 
-.review-actions .header-report-links button {
+.review-actions .header-report-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #cbdbea;
+  border-radius: 6px;
   border-color: #cbdbea;
   background: #f4f9fd;
   color: #133b5c;
+  font-size: 13px;
+  font-weight: 850;
+  text-decoration: none;
 }
 
 .run-status {
@@ -1162,6 +1172,8 @@ input {
 }
 
 .word-download-card {
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-start;
   gap: 10px;
   min-height: 58px;
@@ -1171,6 +1183,7 @@ input {
   background: #f7fbff;
   color: #1b5e91;
   text-align: left;
+  text-decoration: none;
 }
 
 .word-download-card:hover {
@@ -2279,7 +2292,10 @@ input {
 
 .workspace.table-review-workspace.setup-collapsed .results-panel {
   grid-template-columns: minmax(720px, 1fr) minmax(360px, 430px);
+  grid-auto-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
   height: 100%;
+  overflow: hidden;
 }
 
 .workspace.table-review-workspace.setup-collapsed .run-status {
@@ -2297,6 +2313,8 @@ input {
 
 .workspace.table-review-workspace.setup-collapsed .table-card {
   grid-column: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .workspace.table-review-workspace.setup-collapsed .species-table-header {
@@ -2314,7 +2332,8 @@ input {
 }
 
 .workspace.table-review-workspace.setup-collapsed .species-list {
-  max-height: calc(100vh - 405px);
+  max-height: calc(100vh - 425px);
+  min-height: 0;
 }
 
 .workspace.table-review-workspace.setup-collapsed .species-row {
@@ -2336,7 +2355,10 @@ input {
 .workspace.table-review-workspace.setup-collapsed .detail-panel {
   grid-column: 2;
   grid-row: 3 / span 2;
+  min-height: 0;
   max-height: calc(100vh - 255px);
+  overflow: auto;
+  background: #fff;
 }
 
 .map-run-summary {
