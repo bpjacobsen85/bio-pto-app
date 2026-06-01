@@ -988,11 +988,6 @@ function App() {
     void loadPortalLayerItems()
   }
 
-  function handleBrowseAllPortalContent() {
-    setPortalLayerSearch('')
-    void loadPortalLayerItems('', portalSearchScope)
-  }
-
   function handleOpenSelectedPortalItem() {
     if (!selectedPortalItem) return
     window.open(`${arcgisPortalUrl}/home/item.html?id=${selectedPortalItem.id}`, '_blank', 'noopener,noreferrer')
@@ -1497,11 +1492,10 @@ function App() {
                     <Settings2 size={15} />
                   </button>
                 </div>
-                <button className="browser-folder-row" type="button" onClick={handleBrowseAllPortalContent}>
+                <div className="browser-folder-row" aria-label="Current layer search source">
                   <FolderOpen size={16} />
-                  {portalSearchScope === 'mine' ? 'All my content' : portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}
-                  <ChevronRight size={14} />
-                </button>
+                  <span>{portalSearchScope === 'mine' ? 'Showing my content' : portalSearchScope === 'organization' ? 'Showing organization content' : 'Showing ArcGIS Online content'}</span>
+                </div>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
                 <div className={`portal-browser-content ${selectedPortalItem ? 'has-detail' : ''}`}>
