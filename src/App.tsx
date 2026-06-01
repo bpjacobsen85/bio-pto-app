@@ -414,6 +414,8 @@ function App() {
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [statsTableUrl, setStatsTableUrl] = useState(savedAnalysisRun?.summaryTableUrl ?? defaultStatsTableUrl)
   const [cnddbLayerUrl, setCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? defaultCnddbLayerUrl)
+  const [existingSummaryTableUrl, setExistingSummaryTableUrl] = useState(savedAnalysisRun?.summaryTableUrl ?? '')
+  const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState(savedAnalysisRun?.cnddbLayerUrl ?? '')
   const [bufferLayerUrl, setBufferLayerUrl] = useState(savedAnalysisRun?.bufferLayerUrl ?? '')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
   const [statsStatus, setStatsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -681,6 +683,41 @@ function App() {
     setLoadedProjectLayerUrl(projectLayerUrl.trim())
   }
 
+  function handleLoadExistingResults() {
+    const nextSummaryUrl = featureLayerZeroUrl(existingSummaryTableUrl)
+    const nextCnddbUrl = existingCnddbLayerUrl.trim() ? featureLayerZeroUrl(existingCnddbLayerUrl) : cnddbLayerUrl
+
+    if (!nextSummaryUrl) {
+      setAnalysisStatus('error')
+      setAnalysisMessage('Paste the All Stats summary table FeatureServer URL before loading existing results.')
+      return
+    }
+
+    setSetupCollapsed(true)
+    setSpeciesResults([])
+    setSelectedSpeciesId(null)
+    setRatingFilter(null)
+    setConservationFilters([])
+    setReviewEdits({})
+    setStatsTableUrl(nextSummaryUrl)
+    if (nextCnddbUrl) setCnddbLayerUrl(nextCnddbUrl)
+    setBufferLayerUrl('')
+    setApproxCreditsUsed('Manual')
+    setAnalysisStatus('ready')
+    setAnalysisMessage('Existing ArcGIS Online results loaded. The app is reading the summary table.')
+    setReportStatus('idle')
+    setReportMessage('')
+    setReportLinks({ animals: '', plants: '', excel: '' })
+    saveAnalysisRun({
+      projectName: projectName.trim() || 'BIO_PTO_Project',
+      summaryTableUrl: nextSummaryUrl,
+      cnddbLayerUrl: nextCnddbUrl,
+      bufferLayerUrl: '',
+      approxCreditsUsed: 'Manual',
+      completedAt: new Date().toISOString(),
+    })
+  }
+
   async function handleRunAnalysis() {
     if (analysisStatus === 'submitting' || analysisStatus === 'running') return
     if (!loadedProjectLayerUrl.trim()) {
@@ -762,6 +799,8 @@ function App() {
     clearSavedAnalysisRun()
     setStatsTableUrl(defaultStatsTableUrl)
     setCnddbLayerUrl(defaultCnddbLayerUrl)
+    setExistingSummaryTableUrl('')
+    setExistingCnddbLayerUrl('')
     setBufferLayerUrl('')
     setSpeciesResults([])
     setSelectedSpeciesId(null)
@@ -991,6 +1030,17 @@ function App() {
                 <h2>Loaded Results</h2>
                 <p>{analysisStatus === 'ready' ? 'Current notebook output services.' : 'Sample output services for testing.'}</p>
               </div>
+            </div>
+            <div className="existing-results-loader">
+              <label>
+                All Stats summary table URL
+                <input value={existingSummaryTableUrl} onChange={(event) => setExistingSummaryTableUrl(event.target.value)} placeholder=".../All_Stats.../FeatureServer/0" />
+              </label>
+              <label>
+                CNDDB clip layer URL
+                <input value={existingCnddbLayerUrl} onChange={(event) => setExistingCnddbLayerUrl(event.target.value)} placeholder=".../CNDDB_clip.../FeatureServer/0" />
+              </label>
+              <button className="secondary-button" type="button" onClick={handleLoadExistingResults}>Load Results</button>
             </div>
             <div className="estimate-grid">
               <span>Species rows</span>
