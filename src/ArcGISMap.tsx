@@ -6,7 +6,6 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Sketch from '@arcgis/core/widgets/Sketch'
 import LayerList from '@arcgis/core/widgets/LayerList'
-import SearchWidget from '@arcgis/core/widgets/Search'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
@@ -37,7 +36,7 @@ export type ProjectSketchSummary = {
 }
 
 type ArcGISMapProps = {
-  activeMapTool?: 'layers' | 'search' | null
+  activeMapTool?: 'layers' | 'sketch' | null
   webMapId?: string
   projectLayerUrl?: string
   bufferLayerUrl?: string
@@ -117,7 +116,7 @@ function emptySummary(): ProjectSketchSummary {
 export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, selectedSpeciesName, reviewMode = false, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
-  const searchRef = useRef<HTMLDivElement | null>(null)
+  const sketchRef = useRef<HTMLDivElement | null>(null)
   const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
   const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
 
@@ -130,7 +129,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   }, [selectedSpeciesName])
 
   useEffect(() => {
-    if (!containerRef.current || !layerListRef.current || !searchRef.current) return
+    if (!containerRef.current || !layerListRef.current || !sketchRef.current) return
 
     const projectLayer = new GraphicsLayer({ title: 'Project input' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results' })
@@ -218,9 +217,13 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
     }
 
+    const sketchContainer = document.createElement('div')
+    sketchRef.current.replaceChildren(sketchContainer)
+
     const sketch = new Sketch({
       view,
       layer: sketchLayer,
+      container: sketchContainer,
       creationMode: 'update',
       visibleElements: {
         createTools: {
@@ -260,12 +263,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     })
 
     const layerListContainer = document.createElement('div')
-    const searchContainer = document.createElement('div')
     layerListRef.current.replaceChildren(layerListContainer)
-    searchRef.current.replaceChildren(searchContainer)
 
     const layerList = new LayerList({ view, container: layerListContainer })
-    const search = new SearchWidget({ view, container: searchContainer })
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
 
@@ -356,7 +356,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     sketch.on('delete', notifyInputChange)
 
     view.when(() => {
-      if (!reviewMode) view.ui.add(sketch, 'top-right')
       view.ui.move('zoom', 'bottom-left')
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
@@ -385,7 +384,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     return () => {
       window.clearInterval(interval)
       layerList.destroy()
-      search.destroy()
       sketch.destroy()
       projectFeatureLayer?.destroy()
       bufferOutputLayer?.destroy()
@@ -398,7 +396,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     <div className="arcgis-map-shell">
       <div className="arcgis-map" ref={containerRef} />
       <div className={`map-widget-panel layer-widget-panel ${activeMapTool === 'layers' ? 'open' : ''}`} ref={layerListRef} />
-      <div className={`map-widget-panel search-widget-panel ${activeMapTool === 'search' ? 'open' : ''}`} ref={searchRef} />
+      <div className={`map-widget-panel sketch-widget-panel ${!reviewMode && activeMapTool === 'sketch' ? 'open' : ''}`} ref={sketchRef} />
     </div>
   )
 }

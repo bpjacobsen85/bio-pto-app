@@ -1571,11 +1571,40 @@ input {
   border-bottom: 1px solid #e2e8ef;
 }
 
-.table-heading button {
+.table-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.table-heading-actions span {
+  color: #657484;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.table-heading button:not(.show-all-button) {
   width: 32px;
   height: 32px;
   min-height: 32px;
   padding: 0;
+}
+
+.show-all-button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid #bdd6e8;
+  border-radius: 6px;
+  background: #f5fbff;
+  color: #155d8f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.show-all-button:disabled {
+  opacity: .48;
 }
 
 .conservation-filter {

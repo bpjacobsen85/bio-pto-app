@@ -8,6 +8,7 @@ import {
   Map as MapIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  PencilLine,
   Play,
   Plus,
   RotateCcw,
@@ -24,7 +25,7 @@ import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
-type MapTool = 'layers' | 'search' | null
+type MapTool = 'layers' | 'sketch' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
 type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
@@ -807,6 +808,7 @@ function App() {
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
   const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
   const isReviewingResults = setupCollapsed && hasResults
+  const hasSpeciesFilters = speciesTypeFilter !== 'All' || ratingFilter !== null || conservationFilters.length > 0
 
   useEffect(() => {
     setReviewSaveStatus('idle')
@@ -860,6 +862,13 @@ function App() {
 
   function toggleMapTool(tool: Exclude<MapTool, null>) {
     setActiveMapTool((current) => current === tool ? null : tool)
+  }
+
+  function clearSpeciesFilters() {
+    setSpeciesTypeFilter('All')
+    setRatingFilter(null)
+    setConservationFilters([])
+    setSelectedSpeciesId(speciesResults[0]?.objectId ?? null)
   }
 
   function updatePtoCriteria(key: keyof PtoCriteria, value: string) {
@@ -1565,7 +1574,9 @@ function App() {
         <section className="map-stage" aria-label="Map preview">
           <div className="map-toolbar">
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
-            <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
+            {!isReviewingResults && (
+              <button className={`tool-button ${activeMapTool === 'sketch' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('sketch')}><PencilLine size={17} /> Sketch</button>
+            )}
           </div>
           <div className="map-canvas">
             <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} />
@@ -1673,6 +1684,14 @@ function App() {
           <div className="table-card">
             <div className="table-heading">
               <h2>Species Results</h2>
+              <div className="table-heading-actions">
+                {hasSpeciesFilters && (
+                  <span>Showing {filteredSpeciesResults.length} of {speciesResults.length}</span>
+                )}
+                <button className="show-all-button" type="button" onClick={clearSpeciesFilters} disabled={!hasSpeciesFilters && selectedSpeciesId === speciesResults[0]?.objectId}>
+                  Show all
+                </button>
+              </div>
             </div>
             <div className="species-filter segmented-control compact" aria-label="Species type filter">
               {(['All', 'Plants', 'Animals'] as SpeciesTypeFilter[]).map((filter) => (

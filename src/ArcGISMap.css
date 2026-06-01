@@ -67,6 +67,13 @@
   display: block;
 }
 
-.search-widget-panel {
+.sketch-widget-panel {
+  width: min(420px, calc(100% - 28px));
+  max-height: none;
   overflow: visible;
+}
+
+.sketch-widget-panel .esri-sketch {
+  box-shadow: none;
+  border-radius: 8px;
 }
