@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownToLine,
   CheckCircle2,
@@ -392,6 +392,7 @@ function App() {
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
   const [reportMessage, setReportMessage] = useState('')
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
+  const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
@@ -580,13 +581,30 @@ function App() {
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
 
+  async function ensureSignedIn() {
+    if (user) return user
+    if (signInPromiseRef.current) return signInPromiseRef.current
+
+    const signInPromise = signInToArcGIS()
+      .then((signedInUser) => {
+        setUser(signedInUser)
+        return signedInUser
+      })
+      .finally(() => {
+        signInPromiseRef.current = null
+      })
+
+    signInPromiseRef.current = signInPromise
+    return signInPromise
+  }
+
   async function handleSignIn() {
+    if (authStatus === 'checking' || authStatus === 'signing-in') return
     setAuthStatus('signing-in')
     setAuthMessage('')
 
     try {
-      const signedInUser = await signInToArcGIS()
-      setUser(signedInUser)
+      await ensureSignedIn()
       setAuthStatus('idle')
     } catch (error) {
       setAuthStatus('error')
@@ -594,8 +612,16 @@ function App() {
     }
   }
 
+  function handleSignInKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    event.stopPropagation()
+    void handleSignIn()
+  }
+
   function handleSignOut() {
     signOutOfArcGIS()
+    signInPromiseRef.current = null
     setUser(null)
     setAuthStatus('idle')
   }
@@ -630,12 +656,7 @@ function App() {
     setAnalysisMessage('Signing in and submitting the ArcGIS Notebook web tool...')
 
     try {
-      let activeUser = user
-      if (!activeUser) {
-        activeUser = await signInToArcGIS()
-        setUser(activeUser)
-      }
-
+      await ensureSignedIn()
       const token = await getArcGISToken()
       const projectInput = projectSketch.projectInput ?? { url: loadedProjectLayerUrl.trim() }
       const job = await runNotebookWebTool(
@@ -712,12 +733,7 @@ function App() {
     setReportMessage('Submitting report notebook...')
 
     try {
-      let activeUser = user
-      if (!activeUser) {
-        activeUser = await signInToArcGIS()
-        setUser(activeUser)
-      }
-
+      await ensureSignedIn()
       const token = await getArcGISToken()
       const job = await runNotebookWebTool(
         generateReportToolUrl,
@@ -777,7 +793,7 @@ function App() {
               <span>{user.fullName || user.username}</span>
             </button>
           ) : (
-            <button className="secondary-button" type="button" onClick={handleSignIn} disabled={authStatus === 'checking' || authStatus === 'signing-in'}>
+            <button className="secondary-button" type="button" onClick={handleSignIn} onKeyDown={handleSignInKeyDown} disabled={authStatus === 'checking' || authStatus === 'signing-in'}>
               <ShieldCheck size={17} />
               {authStatus === 'checking' ? 'Checking...' : authStatus === 'signing-in' ? 'Signing in...' : 'Sign in'}
             </button>
