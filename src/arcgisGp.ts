@@ -2,6 +2,7 @@ type ArcgisJson = Record<string, unknown>
 
 export type NotebookJobStatus = {
   status: string
+  jobStatus?: string
   messages?: Array<{ description?: string; type?: string }>
 }
 
@@ -61,6 +62,10 @@ function newestMessage(status: NotebookJobStatus) {
   return [...(status.messages ?? [])].reverse().find((message) => message.description)?.description
 }
 
+function normalizedJobStatus(status: NotebookJobStatus) {
+  return String(status.jobStatus ?? status.status ?? '')
+}
+
 export async function runNotebookWebTool(
   gpServerUrl: string,
   token: string,
@@ -76,7 +81,11 @@ export async function runNotebookWebTool(
   }
 
   for (;;) {
-    const status = await requestArcgisJson(`${taskUrl}/jobs/${jobId}`, { token }) as NotebookJobStatus
+    const statusResponse = await requestArcgisJson(`${taskUrl}/jobs/${jobId}`, { token }) as NotebookJobStatus
+    const status = {
+      ...statusResponse,
+      status: normalizedJobStatus(statusResponse),
+    }
     onStatus?.(status)
 
     if (status.status === 'esriJobSucceeded') {
