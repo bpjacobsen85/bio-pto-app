@@ -155,7 +155,7 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
     const cnddbOutputLayer = cnddbLayerUrl?.trim()
       ? new FeatureLayer({
         url: cnddbLayerUrl.trim(),
-        title: 'SDGE Suncrest CNDDB results',
+        title: 'CNDDB output results',
         outFields: ['*'],
         opacity: 0.72,
       })
@@ -231,14 +231,16 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
     })
 
     projectLayer.addMany([buffer, corridor])
-    resultLayer.addMany([
-      makeOccurrence(-121.61, 38.48, '#d64545', 'High potential'),
-      makeOccurrence(-121.53, 38.56, '#d64545', 'High potential'),
-      makeOccurrence(-121.42, 38.41, '#e59f2a', 'Moderate potential'),
-      makeOccurrence(-121.72, 38.32, '#3b82b6', 'Low potential'),
-      makeOccurrence(-121.38, 38.62, '#7c5cc4', 'Needs Review'),
-      makeOccurrence(-121.58, 38.23, '#8a94a6', 'No Potential'),
-    ])
+    if (!cnddbOutputLayer) {
+      resultLayer.addMany([
+        makeOccurrence(-121.61, 38.48, '#d64545', 'High potential'),
+        makeOccurrence(-121.53, 38.56, '#d64545', 'High potential'),
+        makeOccurrence(-121.42, 38.41, '#e59f2a', 'Moderate potential'),
+        makeOccurrence(-121.72, 38.32, '#3b82b6', 'Low potential'),
+        makeOccurrence(-121.38, 38.62, '#7c5cc4', 'Needs Review'),
+        makeOccurrence(-121.58, 38.23, '#8a94a6', 'No Potential'),
+      ])
+    }
 
     let featureLayerSummary: ProjectSketchSummary | null = null
     let projectFeatureLayer: FeatureLayer | null = null
