@@ -625,6 +625,14 @@ function App() {
   const highDistanceLabel = formatCriteriaMiles(ptoCriteria.highDistance)
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
+  const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
+  const runStateLabel = analysisStatus === 'ready'
+    ? 'Model complete'
+    : analysisStatus === 'running' || analysisStatus === 'submitting'
+      ? 'Model running'
+      : analysisStatus === 'error'
+        ? 'Run needs attention'
+        : 'Ready for setup'
 
   async function ensureSignedIn() {
     if (user) return user
@@ -917,12 +925,12 @@ function App() {
         </div>
       </header>
 
-      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''}`}>
+      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''} ${hasResults ? 'results-workspace' : ''}`}>
         <aside className={`setup-panel ${setupCollapsed ? 'collapsed' : ''}`} aria-label="Analysis setup">
           {setupCollapsed ? (
             <button className="setup-rail-button" type="button" onClick={() => setSetupCollapsed(false)} aria-label="Show analysis setup">
               <PanelLeftOpen size={18} />
-              <span>Setup</span>
+              <span>{hasResults ? 'Run again' : 'Setup'}</span>
             </button>
           ) : (
             <div className="setup-panel-toolbar">
@@ -1067,6 +1075,19 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
+          {setupCollapsed && (
+            <div className="map-run-summary">
+              <div>
+                <p className="eyebrow">{runStateLabel}</p>
+                <h2>{projectName || 'BIO PTO Project'}</h2>
+                <span>{totalSpecies.toLocaleString()} species - {bufferLayerUrl ? 'Buffer loaded' : 'Buffer pending'} - {cnddbLayerUrl ? 'CNDDB loaded' : 'CNDDB pending'}</span>
+              </div>
+              <button type="button" onClick={() => setSetupCollapsed(false)}>
+                <PanelLeftOpen size={15} />
+                Edit setup
+              </button>
+            </div>
+          )}
           <div className="map-canvas">
             <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
@@ -1091,7 +1112,7 @@ function App() {
               <small>{analysisStatus === 'ready' ? 'Completed notebook run' : statsStatus === 'idle' ? 'No results loaded' : statsStatus}</small>
             </div>
             <div className="review-actions">
-              <button type="button" onClick={() => setSetupCollapsed(false)}><Layers3 size={16} /> Open map</button>
+              <button type="button" onClick={() => setSetupCollapsed(false)}><PanelLeftOpen size={16} /> Edit setup / run again</button>
             </div>
           </div>
 
