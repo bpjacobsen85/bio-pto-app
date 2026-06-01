@@ -11,6 +11,7 @@ export type ArcgisUser = {
   username: string
   fullName?: string
   thumbnailUrl?: string
+  orgId?: string
 }
 
 function configureOAuth() {
@@ -41,6 +42,7 @@ async function getPortalUser(): Promise<ArcgisUser> {
     username: user.username,
     fullName: user.fullName || undefined,
     thumbnailUrl: user.thumbnailUrl || undefined,
+    orgId: user.orgId || undefined,
   }
 }
 

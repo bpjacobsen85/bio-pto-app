@@ -28,6 +28,8 @@ type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'sketch' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
+type LayerBrowserMode = 'project-input' | 'map-layer'
+type PortalSearchScope = 'mine' | 'organization' | 'arcgis'
 type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
 type ReportStatus = 'idle' | 'generating' | 'ready' | 'error'
 type AnalysisStatus = 'idle' | 'submitting' | 'running' | 'ready' | 'error'
@@ -104,6 +106,12 @@ type PortalSublayer = {
   url: string
   kind: 'layer' | 'table'
   geometryType?: string
+}
+
+type MapAddedLayer = {
+  id: string
+  title: string
+  url: string
 }
 
 const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || ''
@@ -582,6 +590,8 @@ function App() {
   const [reportMessage, setReportMessage] = useState('')
   const [reportLinks, setReportLinks] = useState({ animals: '', plants: '', excel: '' })
   const [layerBrowserOpen, setLayerBrowserOpen] = useState(false)
+  const [layerBrowserMode, setLayerBrowserMode] = useState<LayerBrowserMode>('project-input')
+  const [portalSearchScope, setPortalSearchScope] = useState<PortalSearchScope>('mine')
   const [portalLayerItems, setPortalLayerItems] = useState<PortalLayerItem[]>([])
   const [portalLayerSearch, setPortalLayerSearch] = useState('')
   const [selectedPortalItem, setSelectedPortalItem] = useState<PortalLayerItem | null>(null)
@@ -589,6 +599,7 @@ function App() {
   const [layerBrowserStatus, setLayerBrowserStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [sublayerStatus, setSublayerStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [layerBrowserMessage, setLayerBrowserMessage] = useState('Sign in to browse ArcGIS feature services.')
+  const [mapAddedLayers, setMapAddedLayers] = useState<MapAddedLayer[]>([])
   const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
@@ -886,7 +897,7 @@ function App() {
     setLoadedProjectLayerUrl(nextUrl)
   }
 
-  async function loadPortalLayerItems(searchText = portalLayerSearch) {
+  async function loadPortalLayerItems(searchText = portalLayerSearch, scope = portalSearchScope) {
     setLayerBrowserOpen(true)
     setSelectedPortalItem(null)
     setPortalSublayers([])
@@ -898,9 +909,15 @@ function App() {
       const token = await getArcGISToken()
       const term = searchText.trim()
       const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
+      const termClause = term ? ` AND ${term}` : ''
+      const scopeClause = scope === 'mine'
+        ? `owner:${signedInUser.username}`
+        : scope === 'organization' && signedInUser.orgId
+          ? `orgid:${signedInUser.orgId}`
+          : ''
       search.searchParams.set('f', 'json')
       search.searchParams.set('token', token)
-      search.searchParams.set('q', `owner:${signedInUser.username} AND type:"Feature Service"${term ? ` AND ${term}` : ''}`)
+      search.searchParams.set('q', `${scopeClause ? `${scopeClause} AND ` : ''}type:"Feature Service"${termClause}`)
       search.searchParams.set('sortField', 'modified')
       search.searchParams.set('sortOrder', 'desc')
       search.searchParams.set('num', '20')
@@ -925,7 +942,7 @@ function App() {
 
       setPortalLayerItems(layers)
       setLayerBrowserStatus('ready')
-      setLayerBrowserMessage(layers.length ? 'Select a service to inspect its layers, or add the first layer directly.' : 'No feature services were found in your ArcGIS content.')
+      setLayerBrowserMessage(layers.length ? 'Select a service to inspect its layers, or add the first layer directly.' : 'No feature services were found for the current source and search.')
     } catch (error) {
       setLayerBrowserStatus('error')
       setLayerBrowserMessage(error instanceof Error ? error.message : 'Could not browse ArcGIS feature services.')
@@ -933,6 +950,14 @@ function App() {
   }
 
   function handleBrowseProjectLayers() {
+    setLayerBrowserMode('project-input')
+    setPortalSearchScope('mine')
+    void loadPortalLayerItems()
+  }
+
+  function handleBrowseMapLayers() {
+    setLayerBrowserMode('map-layer')
+    setPortalSearchScope('mine')
     void loadPortalLayerItems()
   }
 
@@ -988,6 +1013,20 @@ function App() {
       setLayerBrowserMessage('That item does not expose a FeatureServer URL.')
       return
     }
+
+    if (layerBrowserMode === 'map-layer') {
+      const title = sublayer?.name ?? item.title
+      setMapAddedLayers((current) => [
+        ...current.filter((layer) => layer.url !== nextUrl),
+        { id: `${item.id}-${sublayer?.id ?? '0'}`, title, url: nextUrl },
+      ])
+      setActiveMapTool('layers')
+      setLayerBrowserOpen(false)
+      setLayerBrowserStatus('idle')
+      setSublayerStatus('idle')
+      return
+    }
+
     setProjectLayerUrl(nextUrl)
     setLoadedProjectLayerUrl(nextUrl)
     setProjectName((current) => current.trim() || safeProjectName(item.title))
@@ -1129,6 +1168,8 @@ function App() {
     setAnalysisStatus('idle')
     setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
     setLayerBrowserOpen(false)
+    setLayerBrowserMode('project-input')
+    setPortalSearchScope('mine')
     setPortalLayerItems([])
     setPortalLayerSearch('')
     setSelectedPortalItem(null)
@@ -1136,6 +1177,7 @@ function App() {
     setLayerBrowserStatus('idle')
     setSublayerStatus('idle')
     setLayerBrowserMessage('Sign in to browse ArcGIS feature services.')
+    setMapAddedLayers([])
     setReportStatus('idle')
     setReportMessage('')
     setReportLinks({ animals: '', plants: '', excel: '' })
@@ -1363,11 +1405,23 @@ function App() {
             {layerBrowserOpen && (
               <div className="portal-layer-browser">
                 <div className="browser-heading">
-                  <strong>Browse layers</strong>
+                  <strong>{layerBrowserMode === 'map-layer' ? 'Add data to map' : 'Choose project input layer'}</strong>
                   <button type="button" aria-label="Close layer browser" onClick={() => setLayerBrowserOpen(false)}><X size={16} /></button>
                 </div>
                 <div className="browser-source-row">
-                  <button className="browser-source-button" type="button">My content <ChevronRight size={14} /></button>
+                  <select
+                    className="browser-source-select"
+                    value={portalSearchScope}
+                    onChange={(event) => {
+                      const nextScope = event.target.value as PortalSearchScope
+                      setPortalSearchScope(nextScope)
+                      void loadPortalLayerItems(portalLayerSearch, nextScope)
+                    }}
+                  >
+                    <option value="mine">My content</option>
+                    <option value="organization">My organization</option>
+                    <option value="arcgis">ArcGIS Online</option>
+                  </select>
                 </div>
                 <div className="browser-search-row">
                   <Search size={15} />
@@ -1388,7 +1442,7 @@ function App() {
                 </div>
                 <button className="browser-folder-row" type="button">
                   <FolderOpen size={16} />
-                  All my content
+                  {portalSearchScope === 'mine' ? 'All my content' : portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}
                   <ChevronRight size={14} />
                 </button>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
@@ -1411,7 +1465,7 @@ function App() {
                             <span>{item.owner}</span>
                             <button type="button" onClick={() => handleSelectPortalLayer(item)}>
                               <Plus size={14} />
-                              Add
+                              {layerBrowserMode === 'map-layer' ? 'Add to map' : 'Use'}
                             </button>
                           </div>
                         </div>
@@ -1573,14 +1627,14 @@ function App() {
 
         <section className="map-stage" aria-label="Map preview">
           <div className="map-toolbar">
-            <button className="tool-button" type="button" onClick={handleBrowseProjectLayers}><Plus size={17} /> Add data</button>
+            <button className="tool-button" type="button" onClick={handleBrowseMapLayers}><Plus size={17} /> Add data</button>
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
             {!isReviewingResults && (
               <button className={`tool-button ${activeMapTool === 'sketch' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('sketch')}><PencilLine size={17} /> Sketch</button>
             )}
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={(id) => setMapAddedLayers((current) => current.filter((layer) => layer.id !== id))} />
           </div>
         </section>
 

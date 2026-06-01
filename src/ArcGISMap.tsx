@@ -26,6 +26,12 @@ export type ProjectLayerInput = {
   url: string
 }
 
+export type MapAddedLayer = {
+  id: string
+  title: string
+  url: string
+}
+
 export type ProjectSketchSummary = {
   source: 'Sketch' | 'FeatureLayer' | 'Demo'
   featureCount: number
@@ -41,9 +47,11 @@ type ArcGISMapProps = {
   projectLayerUrl?: string
   bufferLayerUrl?: string
   cnddbLayerUrl?: string
+  mapAddedLayers?: MapAddedLayer[]
   selectedSpeciesName?: string
   reviewMode?: boolean
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
+  onRemoveMapLayer?: (id: string) => void
 }
 
 function toFeatureSetGeometryType(type: string | undefined): ProjectInputFeatureSet['geometryType'] | null {
@@ -113,7 +121,7 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, selectedSpeciesName, reviewMode = false, onProjectSketchChange }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const sketchRef = useRef<HTMLDivElement | null>(null)
@@ -185,11 +193,18 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         },
       })
       : null
+    const userAddedFeatureLayers = mapAddedLayers.map((layer) => new FeatureLayer({
+      url: layer.url,
+      title: layer.title,
+      outFields: ['*'],
+      popupEnabled: true,
+      customParameters: { bioPtoLayerId: layer.id },
+    }))
 
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
-    map.addMany([projectLayer, resultLayer, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
+    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
 
     const view = new MapView({
       container: containerRef.current,
@@ -265,7 +280,26 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     const layerListContainer = document.createElement('div')
     layerListRef.current.replaceChildren(layerListContainer)
 
-    const layerList = new LayerList({ view, container: layerListContainer })
+    const layerList = new LayerList({
+      view,
+      container: layerListContainer,
+      listItemCreatedFunction: (event) => {
+        const layer = event.item.layer as FeatureLayer | undefined
+        const removableLayer = mapAddedLayers.find((candidate) => candidate.url === layer?.url)
+        if (!removableLayer) return
+        event.item.actionsSections = [[{
+          type: 'button',
+          title: 'Remove layer',
+          className: 'esri-icon-trash',
+          id: `remove-${removableLayer.id}`,
+        }]]
+      },
+    })
+
+    layerList.on('trigger-action', (event) => {
+      const match = String(event.action.id).match(/^remove-(.+)$/)
+      if (match) onRemoveMapLayer?.(match[1])
+    })
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
 
@@ -386,11 +420,12 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       layerList.destroy()
       sketch.destroy()
       projectFeatureLayer?.destroy()
+      userAddedFeatureLayers.forEach((layer) => layer.destroy())
       bufferOutputLayer?.destroy()
       cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [bufferLayerUrl, cnddbLayerUrl, onProjectSketchChange, reviewMode, webMapId])
+  }, [bufferLayerUrl, cnddbLayerUrl, mapAddedLayers, onProjectSketchChange, reviewMode, webMapId])
 
   return (
     <div className="arcgis-map-shell">
