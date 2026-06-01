@@ -1,6 +1,5 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDownToLine,
   CheckCircle2,
   ChevronRight,
   FileText,
@@ -237,6 +236,34 @@ function addTokenToUrl(url: string, token: string) {
 function stringifyOutput(value: unknown) {
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2) ?? ''
+}
+
+function reportOutputLink(output: unknown) {
+  const value = outputValue(output as Record<string, unknown>)
+  const directUrl = outputUrl(output as Record<string, unknown>)
+  if (directUrl) return directUrl
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim().replace(/^"|"$/g, '')
+    if (trimmed.startsWith('http')) return trimmed
+    try {
+      const parsed = JSON.parse(trimmed) as { itemId?: string; id?: string; url?: string }
+      if (parsed.url) return parsed.url
+      const itemId = parsed.itemId ?? parsed.id
+      if (itemId) return `${arcgisPortalUrl}/sharing/rest/content/items/${itemId}/data`
+    } catch {
+      // Fall through to object parsing below.
+    }
+  }
+
+  if (value && typeof value === 'object') {
+    const itemId = (value as { itemId?: unknown; id?: unknown }).itemId ?? (value as { itemId?: unknown; id?: unknown }).id
+    if (typeof itemId === 'string' && itemId.trim()) {
+      return `${arcgisPortalUrl}/sharing/rest/content/items/${itemId.trim()}/data`
+    }
+  }
+
+  return ''
 }
 
 function approximateCreditLabel(value: unknown) {
@@ -1045,19 +1072,31 @@ function App() {
         },
       )
 
-      const [excelOutput, animalsOutput, plantsOutput] = await Promise.all([
-        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Summary_Excel_Link'),
-        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Animals_Word_Doc_Link'),
-        getNotebookJobOutput(job.taskUrl, job.jobId, token, 'PTO_Plants_Word_Doc_Link'),
+      const getOptionalOutput = async (names: string[]) => {
+        for (const name of names) {
+          try {
+            const output = await getNotebookJobOutput(job.taskUrl, job.jobId, token, name)
+            const link = reportOutputLink(output)
+            if (link) return link
+          } catch {
+            // Try the next likely output parameter name.
+          }
+        }
+        return ''
+      }
+
+      const [animalsLink, plantsLink] = await Promise.all([
+        getOptionalOutput(['PTO_Animals_Word_Doc_Link', 'PTO_Animals_Word_Doc', 'PTO_Animals_Doc_Link', 'PTO_Animals_Doc']),
+        getOptionalOutput(['PTO_Plants_Word_Doc_Link', 'PTO_Plants_Word_Doc', 'PTO_Plants_Doc_Link', 'PTO_Plants_Doc']),
       ])
 
       setReportLinks({
-        excel: stringifyOutput(outputValue(excelOutput)).replace(/^"|"$/g, ''),
-        animals: stringifyOutput(outputValue(animalsOutput)).replace(/^"|"$/g, ''),
-        plants: stringifyOutput(outputValue(plantsOutput)).replace(/^"|"$/g, ''),
+        excel: '',
+        animals: animalsLink,
+        plants: plantsLink,
       })
       setReportStatus('ready')
-      setReportMessage('Report package ready.')
+      setReportMessage(animalsLink || plantsLink ? 'Report package ready.' : 'Report generated, but the app could not read the Word document output links.')
     } catch (error) {
       setReportStatus('error')
       setReportMessage(error instanceof Error ? error.message : 'Report generation failed.')
@@ -1115,10 +1154,6 @@ function App() {
           )}
           <button className="icon-button" type="button" aria-label="Reset analysis" onClick={handleResetAnalysis}>
             <RotateCcw size={18} />
-          </button>
-          <button className="secondary-button" type="button">
-            <Settings2 size={17} />
-            Settings
           </button>
           <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
             <Play size={17} fill="currentColor" />
@@ -1401,6 +1436,22 @@ function App() {
                 <FileText size={16} />
                 {reportStatus === 'generating' ? 'Generating...' : 'Generate Report'}
               </button>
+              {reportStatus === 'ready' && (reportLinks.animals || reportLinks.plants) && (
+                <div className="header-report-links" aria-label="Generated report downloads">
+                  {reportLinks.animals && (
+                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.animals)}>
+                      <FileText size={15} />
+                      Animals PTO
+                    </button>
+                  )}
+                  {reportLinks.plants && (
+                    <button type="button" onClick={() => void handleOpenReportLink(reportLinks.plants)}>
+                      <FileText size={15} />
+                      Plants PTO
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1457,7 +1508,6 @@ function App() {
           <div className="table-card">
             <div className="table-heading">
               <h2>Species Results</h2>
-              <button type="button"><ArrowDownToLine size={16} /></button>
             </div>
             <div className="species-filter segmented-control compact" aria-label="Species type filter">
               {(['All', 'Plants', 'Animals'] as SpeciesTypeFilter[]).map((filter) => (

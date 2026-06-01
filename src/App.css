@@ -1017,6 +1017,18 @@ input {
   color: #fff;
 }
 
+.header-report-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.review-actions .header-report-links button {
+  border-color: #cbdbea;
+  background: #f4f9fd;
+  color: #133b5c;
+}
+
 .run-status {
   gap: 10px;
   padding: 12px;
