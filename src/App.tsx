@@ -80,6 +80,7 @@ const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || 'h
 const defaultCnddbLayerUrl = ''
 const defaultStatsTableUrl = ''
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
+const defaultWebMapId = import.meta.env.VITE_DEFAULT_WEBMAP_ID || ''
 const runModelToolUrl = import.meta.env.VITE_RUN_MODEL_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/1714398fc38148488ee82a2a6c698c82/GPServer'
 const generateReportToolUrl = import.meta.env.VITE_REPORT_NOTEBOOK_TOOL_URL || 'https://notebookswebtools.arcgis.com/arcgis/rest/services/29e2ba5e56fb42faba0f2e9d9ba06b4a/GPServer'
 const plantLookupTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/BIO_PTO_Model_Lookup_Tables_gdb/FeatureServer/0'
@@ -1067,7 +1068,7 @@ function App() {
             <button className={`tool-button ${activeMapTool === 'search' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('search')}><Search size={17} /> Search</button>
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${loadedProjectLayerUrl}|${cnddbLayerUrl}`} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${cnddbLayerUrl}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} cnddbLayerUrl={cnddbLayerUrl} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} onProjectSketchChange={setProjectSketch} />
           </div>
           {speciesResults.length > 0 && (
             <div className="legend-panel">

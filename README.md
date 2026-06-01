@@ -26,10 +26,13 @@ VITE_ARCGIS_PORTAL_URL=https://www.arcgis.com
 VITE_ARCGIS_CLIENT_ID=<ArcGIS OAuth app client ID>
 VITE_RUN_MODEL_TOOL_URL=<BIO_PTO_Run_Model_ONLY GPServer URL>
 VITE_REPORT_NOTEBOOK_TOOL_URL=<BIO_PTO_Generate_Report_ONLY GPServer URL>
+VITE_DEFAULT_WEBMAP_ID=<ArcGIS Online Web Map item ID>
 VITE_RUN_HISTORY_TABLE_URL=<BIO_PTO_Run_History hosted table URL>
 ```
 
 These are browser-side Vite variables. Do not put private admin passwords or permanent tokens here.
+
+`VITE_DEFAULT_WEBMAP_ID` is optional. When set, the app opens that ArcGIS Online Web Map as the base map and overlays the BIO PTO project input, sketch layer, and result layers on top. When blank, the app uses the default topo-vector basemap.
 
 ## Planned ArcGIS Flow
 

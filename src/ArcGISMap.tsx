@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef } from 'react'
 import Map from '@arcgis/core/Map'
+import WebMap from '@arcgis/core/WebMap'
 import MapView from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
@@ -41,6 +42,7 @@ export type ProjectSketchSummary = {
 
 type ArcGISMapProps = {
   activeMapTool?: 'layers' | 'search' | null
+  webMapId?: string
   projectLayerUrl?: string
   cnddbLayerUrl?: string
   selectedSpeciesName?: string
@@ -131,7 +133,7 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, cnddbLayerUrl, selectedSpeciesName, onProjectSketchChange }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
@@ -161,10 +163,10 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
       })
       : null
 
-    const map = new Map({
-      basemap: 'topo-vector',
-      layers: cnddbOutputLayer ? [projectLayer, resultLayer, cnddbOutputLayer, sketchLayer] : [projectLayer, resultLayer, sketchLayer],
-    })
+    const map = webMapId?.trim()
+      ? new WebMap({ portalItem: { id: webMapId.trim() } })
+      : new Map({ basemap: 'topo-vector' })
+    map.addMany(cnddbOutputLayer ? [projectLayer, resultLayer, cnddbOutputLayer, sketchLayer] : [projectLayer, resultLayer, sketchLayer])
 
     const view = new MapView({
       container: containerRef.current,
@@ -426,7 +428,7 @@ export function ArcGISMap({ activeMapTool = null, projectLayerUrl, cnddbLayerUrl
       cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [cnddbLayerUrl, onProjectSketchChange])
+  }, [cnddbLayerUrl, onProjectSketchChange, webMapId])
 
   return (
     <div className="arcgis-map-shell">
