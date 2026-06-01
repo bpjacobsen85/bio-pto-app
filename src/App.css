@@ -542,7 +542,13 @@ h3 {
   margin: 0 12px 12px;
   border: 1px solid #cfd8e3;
   background: #fff;
-  color: #263542;
+  color: #1b6ca8;
+  font-weight: 800;
+}
+
+.favorite-button:hover {
+  border-color: #7fb1d4;
+  background: #f5fbff;
 }
 
 .detail-accordion-row,
@@ -556,6 +562,53 @@ h3 {
   border-top: 1px solid #edf1f5;
   color: #263542;
   font-size: 13px;
+}
+
+.detail-accordion-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: #fff;
+  text-align: left;
+}
+
+.detail-accordion-row:hover {
+  background: #f7fafc;
+}
+
+.detail-accordion-row svg {
+  transition: transform .14s ease;
+}
+
+.detail-accordion-row.open svg {
+  transform: rotate(90deg);
+}
+
+.detail-accordion-content {
+  padding: 10px 12px 12px;
+  border-top: 1px solid #edf1f5;
+  background: #f8fbfc;
+  color: #4f6070;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.detail-metadata {
+  display: grid;
+  gap: 7px;
+}
+
+.detail-metadata span {
+  display: grid;
+  gap: 2px;
+}
+
+.detail-metadata strong {
+  min-width: 0;
+  color: #263542;
+  font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 .detail-layer-heading {
@@ -1113,6 +1166,11 @@ input {
 .summary-card.neutral {
   color: #5f6b7a;
   cursor: default;
+}
+
+.summary-card.neutral:hover {
+  background: #fff;
+  transform: none;
 }
 
 .downloads-row,
@@ -1825,9 +1883,9 @@ input {
 }
 
 .review-status-pill.reviewed {
-  border-color: #bcdcc8;
-  background: #eff8f3;
-  color: #17613a;
+  border-color: #aebdca;
+  background: #fff;
+  color: #425160;
 }
 
 .review-status-pill.needs-senior-review {

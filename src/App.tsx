@@ -95,6 +95,10 @@ type PortalLayerItem = {
   owner: string
   modified?: number
   type?: string
+  snippet?: string
+  description?: string
+  access?: string
+  numViews?: number
   thumbnail?: string
   thumbnailUrl?: string
   url?: string
@@ -237,6 +241,10 @@ function featureServiceUrl(url: string) {
 
 function safeProjectName(value: string) {
   return value.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project'
+}
+
+function stripHtml(value: string) {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function addTokenToUrl(url: string, token: string) {
@@ -595,6 +603,7 @@ function App() {
   const [portalLayerItems, setPortalLayerItems] = useState<PortalLayerItem[]>([])
   const [portalLayerSearch, setPortalLayerSearch] = useState('')
   const [selectedPortalItem, setSelectedPortalItem] = useState<PortalLayerItem | null>(null)
+  const [openPortalDetailSection, setOpenPortalDetailSection] = useState<'description' | 'details' | null>(null)
   const [portalSublayers, setPortalSublayers] = useState<PortalSublayer[]>([])
   const [layerBrowserStatus, setLayerBrowserStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [sublayerStatus, setSublayerStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -949,6 +958,10 @@ function App() {
           owner: item.owner,
           modified: item.modified,
           type: item.type,
+          snippet: item.snippet,
+          description: item.description,
+          access: item.access,
+          numViews: item.numViews,
           thumbnail: item.thumbnail,
           thumbnailUrl: item.thumbnail ? `${arcgisPortalUrl}/sharing/rest/content/items/${item.id}/info/${item.thumbnail}?token=${encodeURIComponent(token)}` : '',
           url: item.url,
@@ -980,9 +993,15 @@ function App() {
     void loadPortalLayerItems('', portalSearchScope)
   }
 
+  function handleOpenSelectedPortalItem() {
+    if (!selectedPortalItem) return
+    window.open(`${arcgisPortalUrl}/home/item.html?id=${selectedPortalItem.id}`, '_blank', 'noopener,noreferrer')
+  }
+
   async function handleInspectPortalItem(item: PortalLayerItem) {
     if (!item.url) return
     setSelectedPortalItem(item)
+    setOpenPortalDetailSection(null)
     setSublayerStatus('loading')
 
     try {
@@ -990,7 +1009,14 @@ function App() {
       const serviceMetadataUrl = new URL(featureServiceUrl(item.url))
       serviceMetadataUrl.searchParams.set('f', 'json')
       serviceMetadataUrl.searchParams.set('token', token)
-      const response = await fetch(serviceMetadataUrl.toString())
+      const itemMetadataUrl = new URL(`${arcgisPortalUrl}/sharing/rest/content/items/${item.id}`)
+      itemMetadataUrl.searchParams.set('f', 'json')
+      itemMetadataUrl.searchParams.set('token', token)
+
+      const [response, itemResponse] = await Promise.all([
+        fetch(serviceMetadataUrl.toString()),
+        fetch(itemMetadataUrl.toString()),
+      ])
       if (!response.ok) throw new Error(`Feature service request failed: ${response.status}`)
       const data = await response.json() as {
         error?: { message?: string }
@@ -998,6 +1024,18 @@ function App() {
         tables?: Array<{ id: number; name: string }>
       }
       if (data.error) throw new Error(data.error.message ?? 'Feature service returned an error.')
+      if (itemResponse.ok) {
+        const itemData = await itemResponse.json() as PortalLayerItem & { error?: { message?: string } }
+        if (!itemData.error) {
+          setSelectedPortalItem((current) => current?.id === item.id ? {
+            ...current,
+            snippet: itemData.snippet ?? current.snippet,
+            description: itemData.description ?? current.description,
+            access: itemData.access ?? current.access,
+            numViews: itemData.numViews ?? current.numViews,
+          } : current)
+        }
+      }
 
       const baseUrl = featureServiceUrl(item.url)
       const nextSublayers: PortalSublayer[] = [
@@ -1504,9 +1542,28 @@ function App() {
                         <span className="owner-chip">{selectedPortalItem.owner.slice(0, 2).toUpperCase()}</span>
                         <span>{selectedPortalItem.owner}</span>
                       </div>
-                      <button className="favorite-button" type="button">Add to favorites</button>
-                      <div className="detail-accordion-row">Description <ChevronRight size={14} /></div>
-                      <div className="detail-accordion-row">Details <ChevronRight size={14} /></div>
+                      <button className="favorite-button" type="button" onClick={handleOpenSelectedPortalItem}>Open in ArcGIS</button>
+                      <button className={`detail-accordion-row ${openPortalDetailSection === 'description' ? 'open' : ''}`} type="button" onClick={() => setOpenPortalDetailSection((current) => current === 'description' ? null : 'description')}>
+                        Description <ChevronRight size={14} />
+                      </button>
+                      {openPortalDetailSection === 'description' && (
+                        <div className="detail-accordion-content">
+                          {stripHtml(selectedPortalItem.description || selectedPortalItem.snippet || '').trim() || 'No item description is available.'}
+                        </div>
+                      )}
+                      <button className={`detail-accordion-row ${openPortalDetailSection === 'details' ? 'open' : ''}`} type="button" onClick={() => setOpenPortalDetailSection((current) => current === 'details' ? null : 'details')}>
+                        Details <ChevronRight size={14} />
+                      </button>
+                      {openPortalDetailSection === 'details' && (
+                        <div className="detail-accordion-content detail-metadata">
+                          <span>Owner <strong>{selectedPortalItem.owner}</strong></span>
+                          <span>Access <strong>{selectedPortalItem.access || 'Unknown'}</strong></span>
+                          <span>Views <strong>{selectedPortalItem.numViews?.toLocaleString() ?? '--'}</strong></span>
+                          <span>Modified <strong>{selectedPortalItem.modified ? new Date(selectedPortalItem.modified).toLocaleDateString() : '--'}</strong></span>
+                          <span>Item ID <strong>{selectedPortalItem.id}</strong></span>
+                          <span>Service URL <strong>{selectedPortalItem.url || '--'}</strong></span>
+                        </div>
+                      )}
                       <div className="detail-layer-heading">Layers ({portalSublayers.length})</div>
                       {sublayerStatus === 'loading' && <div className="browser-loading">Reading service layers...</div>}
                       {sublayerStatus === 'error' && <p className="browser-message error">{layerBrowserMessage}</p>}
