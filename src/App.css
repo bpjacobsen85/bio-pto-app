@@ -1240,6 +1240,21 @@ input {
   font-weight: 850;
 }
 
+.review-save-message {
+  margin: -2px 0 2px;
+  color: #506273;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-save-message.saved {
+  color: #17613a;
+}
+
+.review-save-message.error {
+  color: #b42318;
+}
+
 .review-field textarea {
   min-height: 116px;
   resize: vertical;

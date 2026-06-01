@@ -35,8 +35,12 @@ type ReviewLayout = 'map' | 'table'
 
 type SpeciesResult = {
   objectId: number
+  objectIdField: string
   elmCode: string
   rating: Rating
+  reviewStatus: ReviewStatus
+  reviewedPotential: Rating
+  finalReportDescription: string
   common: string
   scientific: string
   taxonGroup: string
@@ -180,6 +184,14 @@ function normalizeRating(value: unknown): Rating {
   return 'Needs Review'
 }
 
+function normalizeReviewStatus(value: unknown): ReviewStatus {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (text === 'reviewed' || text === 'complete' || text === 'completed') return 'Reviewed'
+  if (text === 'in review' || text === 'reviewing') return 'In Review'
+  if (text === 'needs senior review' || text === 'senior review') return 'Needs Senior Review'
+  return 'Not Started'
+}
+
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -217,10 +229,6 @@ function safeProjectName(value: string) {
   return value.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'BIO_PTO_Project'
 }
 
-function reviewEditsStorageKey(summaryTableUrl: string) {
-  return `bioPto:reviewEdits:${summaryTableUrl.trim()}`
-}
-
 function addTokenToUrl(url: string, token: string) {
   if (!url.trim()) return ''
   try {
@@ -230,6 +238,46 @@ function addTokenToUrl(url: string, token: string) {
   } catch {
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}token=${encodeURIComponent(token)}`
+  }
+}
+
+function findObjectIdField(attributes: Record<string, unknown>, serviceObjectIdField?: string) {
+  if (serviceObjectIdField && attributes[serviceObjectIdField] !== undefined) return serviceObjectIdField
+  return ['OBJECTID', 'ObjectId', 'objectid', 'FID', 'OID']
+    .find((fieldName) => attributes[fieldName] !== undefined)
+    ?? serviceObjectIdField
+    ?? 'OBJECTID'
+}
+
+async function applyArcgisTableUpdate(layerUrl: string, token: string, attributes: Record<string, unknown>) {
+  const body = new URLSearchParams()
+  body.set('f', 'json')
+  body.set('token', token)
+  body.set('rollbackOnFailure', 'true')
+  body.set('updates', JSON.stringify([{ attributes }]))
+
+  const response = await fetch(`${layerUrl.replace(/\/+$/, '')}/applyEdits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+
+  if (!response.ok) {
+    throw new Error(`ArcGIS edit request failed (${response.status}).`)
+  }
+
+  const data = await response.json() as {
+    error?: { message?: string; details?: string[] }
+    updateResults?: Array<{ success?: boolean; error?: { message?: string; description?: string; details?: string[] } }>
+  }
+  if (data.error) {
+    throw new Error([data.error.message, ...(data.error.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS returned an edit error.')
+  }
+
+  const result = data.updateResults?.[0]
+  if (!result?.success) {
+    const editError = result?.error
+    throw new Error([editError?.message, editError?.description, ...(editError?.details ?? [])].filter(Boolean).join(' ') || 'ArcGIS did not save the review edit.')
   }
 }
 
@@ -513,6 +561,8 @@ function App() {
   const [ratingFilter, setRatingFilter] = useState<Rating | null>(null)
   const [conservationFilters, setConservationFilters] = useState<ConservationFilter[]>([])
   const [reviewEdits, setReviewEdits] = useState<Record<number, SpeciesReviewEdit>>({})
+  const [reviewSaveStatus, setReviewSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [reviewSaveMessage, setReviewSaveMessage] = useState('')
   const [setupCollapsed, setSetupCollapsed] = useState(false)
   const [reviewLayout, setReviewLayout] = useState<ReviewLayout>('map')
   const [reportStatus, setReportStatus] = useState<ReportStatus>('idle')
@@ -594,11 +644,19 @@ function App() {
           loadLibraryDescriptions(),
         ])
         if (!statsResponse.ok) throw new Error(`Stats table request failed: ${statsResponse.status}`)
-        const data = await statsResponse.json() as { error?: { message?: string }; features?: Array<{ attributes: Record<string, unknown> }> }
+        const data = await statsResponse.json() as {
+          error?: { message?: string }
+          objectIdFieldName?: string
+          fields?: Array<{ name?: string; type?: string }>
+          features?: Array<{ attributes: Record<string, unknown> }>
+        }
         if (data.error) throw new Error(data.error.message ?? 'Stats table returned an ArcGIS error.')
+        const serviceObjectIdField = data.objectIdFieldName
+          ?? data.fields?.find((field) => String(field.type ?? '').toLowerCase() === 'esrifieldtypeoid')?.name
 
         const rows = (data.features ?? []).map((feature, index) => {
           const attributes = feature.attributes
+          const objectIdField = findObjectIdField(attributes, serviceObjectIdField)
           const taxonGroup = String(attributes.TAXONGROUP ?? 'Unknown')
           const elementType = String(attributes.ELMTYPE_DESC ?? '')
           const elmCode = String(attributes.ELMCODE ?? '')
@@ -613,9 +671,13 @@ function App() {
             ?? libraryDescriptions.byScientificName.get(normalizeLookupKey(attributes.SNAME))
 
           return {
-            objectId: Number(attributes.ObjectId ?? attributes.OBJECTID ?? attributes.OBJECTID_1 ?? attributes.FID ?? index + 1),
+            objectId: Number(attributes[objectIdField] ?? attributes.ObjectId ?? attributes.OBJECTID ?? attributes.OBJECTID_1 ?? attributes.FID ?? index + 1),
+            objectIdField,
             elmCode,
             rating: normalizeRating(attributes.PTO_Review),
+            reviewStatus: normalizeReviewStatus(attributes.review_status),
+            reviewedPotential: normalizeRating(attributes.reviewed_potential ?? attributes.PTO_Review),
+            finalReportDescription: String(attributes.final_report_description ?? ''),
             common: String(attributes.CNAME ?? 'Unknown common name'),
             scientific: String(attributes.SNAME ?? 'Unknown scientific name'),
             taxonGroup,
@@ -650,6 +712,9 @@ function App() {
 
         if (!alive) return
         setSpeciesResults(rows)
+        setReviewEdits({})
+        setReviewSaveStatus('idle')
+        setReviewSaveMessage('')
         setSelectedSpeciesId((current) => current ?? rows[0]?.objectId ?? null)
         setStatsStatus('ready')
         setStatsMessage(`${rows.length} species loaded from the current summary table.`)
@@ -666,21 +731,6 @@ function App() {
       alive = false
     }
   }, [statsTableUrl, user])
-
-  useEffect(() => {
-    if (!statsTableUrl.trim()) return
-    try {
-      const raw = window.localStorage.getItem(reviewEditsStorageKey(statsTableUrl))
-      setReviewEdits(raw ? JSON.parse(raw) as Record<number, SpeciesReviewEdit> : {})
-    } catch {
-      setReviewEdits({})
-    }
-  }, [statsTableUrl])
-
-  useEffect(() => {
-    if (!statsTableUrl.trim() || Object.keys(reviewEdits).length === 0) return
-    window.localStorage.setItem(reviewEditsStorageKey(statsTableUrl), JSON.stringify(reviewEdits))
-  }, [reviewEdits, statsTableUrl])
 
   const listingCodeOptions = useMemo(() => Array.from(new Set(
     speciesResults
@@ -714,11 +764,12 @@ function App() {
   const plantCount = speciesResults.filter((row) => row.speciesType === 'Plants').length
   const animalCount = speciesResults.filter((row) => row.speciesType === 'Animals').length
   const selectedReview = selectedSpecies ? reviewEdits[selectedSpecies.objectId] : undefined
-  const selectedPotential = selectedReview?.rating ?? selectedSpecies?.rating ?? 'Needs Review'
+  const selectedPotential = selectedReview?.rating ?? selectedSpecies?.reviewedPotential ?? selectedSpecies?.rating ?? 'Needs Review'
   const getSpeciesReviewStatus = (species?: SpeciesResult): ReviewStatus => {
     if (!species) return 'Not Started'
     const edit = reviewEdits[species.objectId]
     if (edit?.status) return edit.status
+    if (species.reviewStatus !== 'Not Started') return species.reviewStatus
     if (edit?.rating || edit?.habitatSummary) return 'In Review'
     return 'Not Started'
   }
@@ -728,7 +779,7 @@ function App() {
   const notStartedSpeciesCount = Math.max(0, speciesResults.length - reviewedSpeciesCount - inReviewSpeciesCount - speciesResults.filter((row) => getSpeciesReviewStatus(row) === 'Needs Senior Review').length)
   const speciesLibraryDescription = buildSpeciesLibraryDescription(selectedSpecies)
   const automatedPtoSummary = selectedSpecies?.habitatSummary || 'No automated PTO summary was found in the stats table.'
-  const selectedHabitatSummary = selectedReview?.habitatSummary ?? buildFinalReportDescription(selectedSpecies)
+  const selectedHabitatSummary = selectedReview?.habitatSummary ?? selectedSpecies?.finalReportDescription ?? buildFinalReportDescription(selectedSpecies)
   const criteriaValid = (
     ptoCriteria.highDistance > 0
     && ptoCriteria.highDistance <= ptoCriteria.moderateDistance
@@ -1042,6 +1093,8 @@ function App() {
     setRatingFilter(null)
     setConservationFilters([])
     setReviewEdits({})
+    setReviewSaveStatus('idle')
+    setReviewSaveMessage('')
     setApproxCreditsUsed('0')
     setAnalysisStatus('idle')
     setAnalysisMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
@@ -1058,16 +1111,52 @@ function App() {
     setReportLinks({ animals: '', plants: '', excel: '' })
   }
 
-  function updateSelectedReview(update: SpeciesReviewEdit) {
+  async function updateSelectedReview(update: SpeciesReviewEdit) {
     if (!selectedSpecies) return
+    const species = selectedSpecies
+    const currentEdit = reviewEdits[species.objectId] ?? {}
+    const nextEdit: SpeciesReviewEdit = {
+      ...currentEdit,
+      status: update.status ?? currentEdit.status ?? (update.rating || update.habitatSummary ? 'In Review' : species.reviewStatus || 'In Review'),
+      ...update,
+    }
+
     setReviewEdits((current) => ({
       ...current,
-      [selectedSpecies.objectId]: {
-        ...current[selectedSpecies.objectId],
-        status: update.status ?? current[selectedSpecies.objectId]?.status ?? 'In Review',
-        ...update,
-      },
+      [species.objectId]: nextEdit,
     }))
+    setReviewSaveStatus('saving')
+    setReviewSaveMessage('Saving review to ArcGIS Online...')
+
+    const attributes: Record<string, unknown> = {
+      [species.objectIdField]: species.objectId,
+      review_status: nextEdit.status,
+      reviewed_potential: nextEdit.rating ?? species.reviewedPotential ?? species.rating,
+      final_report_description: nextEdit.habitatSummary ?? species.finalReportDescription ?? buildFinalReportDescription(species),
+      reviewed_by: user?.username ?? '',
+    }
+    if (nextEdit.status === 'Reviewed') {
+      attributes.reviewed_date = Date.now()
+    }
+
+    try {
+      await ensureSignedIn()
+      const token = await getArcGISToken()
+      await applyArcgisTableUpdate(statsTableUrl, token, attributes)
+      setSpeciesResults((rows) => rows.map((row) => row.objectId === species.objectId
+        ? {
+            ...row,
+            reviewStatus: nextEdit.status ?? row.reviewStatus,
+            reviewedPotential: nextEdit.rating ?? row.reviewedPotential,
+            finalReportDescription: nextEdit.habitatSummary ?? row.finalReportDescription,
+          }
+        : row))
+      setReviewSaveStatus('saved')
+      setReviewSaveMessage('Review saved to ArcGIS Online.')
+    } catch (error) {
+      setReviewSaveStatus('error')
+      setReviewSaveMessage(error instanceof Error ? error.message : 'Could not save review to ArcGIS Online.')
+    }
   }
 
   async function handleGenerateReport() {
@@ -1686,25 +1775,30 @@ function App() {
             <div className="review-grid">
               <label className="review-field">
                 Review status
-                <select value={selectedReviewStatus} onChange={(event) => updateSelectedReview({ status: event.target.value as ReviewStatus })} disabled={!selectedSpecies}>
+                <select value={selectedReviewStatus} onChange={(event) => void updateSelectedReview({ status: event.target.value as ReviewStatus })} disabled={!selectedSpecies}>
                   {reviewStatusOrder.map((status) => <option value={status} key={status}>{status}</option>)}
                 </select>
               </label>
               <label className="review-field">
                 Reviewed potential
-                <select value={selectedPotential} onChange={(event) => updateSelectedReview({ rating: event.target.value as Rating })} disabled={!selectedSpecies}>
+                <select value={selectedPotential} onChange={(event) => void updateSelectedReview({ rating: event.target.value as Rating })} disabled={!selectedSpecies}>
                   {ratingOrder.map((rating) => <option value={rating} key={rating}>{rating}</option>)}
                 </select>
               </label>
-              <button className="mark-reviewed-button" type="button" onClick={() => updateSelectedReview({ status: 'Reviewed' })} disabled={!selectedSpecies}>
+              <button className="mark-reviewed-button" type="button" onClick={() => void updateSelectedReview({ status: 'Reviewed' })} disabled={!selectedSpecies}>
                 <CheckCircle2 size={16} /> Mark Reviewed
               </button>
+              {reviewSaveMessage && (
+                <p className={`review-save-message ${reviewSaveStatus}`}>
+                  {reviewSaveMessage}
+                </p>
+              )}
               <section className="report-summary-card">
                 <div className="report-summary-heading">
                   <span>Final Report Description</span>
                   <strong>{selectedPotential}</strong>
                 </div>
-                <textarea aria-label="Final report description" value={selectedHabitatSummary} onChange={(event) => updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
+                <textarea aria-label="Final report description" value={selectedHabitatSummary} onChange={(event) => void updateSelectedReview({ habitatSummary: event.target.value })} disabled={!selectedSpecies} />
               </section>
               <section className="source-summary-card">
                 <h3>Species Library Description</h3>
