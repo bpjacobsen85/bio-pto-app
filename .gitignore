@@ -24,4 +24,6 @@ dist-ssr
 *.sw?
 .env.notebook.local
 notebooks/bio_pto_local_runs/
+notebooks/__pycache__/
+.tmp_pycache/
 
