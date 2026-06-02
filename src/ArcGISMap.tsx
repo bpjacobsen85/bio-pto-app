@@ -135,34 +135,34 @@ function ptoPotentialRenderer(valueExpression?: string) {
       : { field: 'PTO_Review' }),
     defaultSymbol: {
       type: 'simple-fill' as const,
-      color: [126, 144, 162, 0.28],
-      outline: { color: [88, 103, 119, 0.9], width: 0.8 },
+      color: [126, 144, 162, 0.42],
+      outline: { color: [66, 79, 92, 1], width: 1.6 },
     },
     uniqueValueInfos: [
       {
         value: 'High',
         label: 'High',
-        symbol: { type: 'simple-fill' as const, color: [218, 67, 67, 0.42], outline: { color: [151, 34, 34, 1], width: 1.2 } },
+        symbol: { type: 'simple-fill' as const, color: [218, 67, 67, 0.56], outline: { color: [137, 24, 24, 1], width: 2 } },
       },
       {
         value: 'Moderate',
         label: 'Moderate',
-        symbol: { type: 'simple-fill' as const, color: [241, 156, 55, 0.4], outline: { color: [178, 101, 19, 1], width: 1.1 } },
+        symbol: { type: 'simple-fill' as const, color: [241, 156, 55, 0.52], outline: { color: [154, 84, 15, 1], width: 1.8 } },
       },
       {
         value: 'Low',
         label: 'Low',
-        symbol: { type: 'simple-fill' as const, color: [62, 157, 122, 0.36], outline: { color: [29, 113, 82, 1], width: 1 } },
+        symbol: { type: 'simple-fill' as const, color: [62, 157, 122, 0.5], outline: { color: [22, 100, 70, 1], width: 1.8 } },
       },
       {
         value: 'No Potential',
         label: 'No Potential',
-        symbol: { type: 'simple-fill' as const, color: [111, 125, 139, 0.18], outline: { color: [91, 103, 116, 0.75], width: 0.8 } },
+        symbol: { type: 'simple-fill' as const, color: [111, 125, 139, 0.26], outline: { color: [76, 88, 100, 0.95], width: 1.4 } },
       },
       {
         value: 'Needs Review',
         label: 'Needs Review',
-        symbol: { type: 'simple-fill' as const, color: [116, 86, 176, 0.34], outline: { color: [87, 56, 143, 1], width: 1.1 } },
+        symbol: { type: 'simple-fill' as const, color: [116, 86, 176, 0.48], outline: { color: [74, 43, 129, 1], width: 1.8 } },
       },
     ],
   }
@@ -269,6 +269,25 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
     map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), selectedCnddbLayer, sketchLayer])
+
+    const bringReviewLayersToFront = () => {
+      if (bufferOutputLayer && map.layers.includes(bufferOutputLayer)) {
+        map.reorder(bufferOutputLayer, map.layers.length - 1)
+      }
+      if (cnddbOutputLayer && map.layers.includes(cnddbOutputLayer)) {
+        map.reorder(cnddbOutputLayer, map.layers.length - 1)
+      }
+      if (selectedCnddbLayer && map.layers.includes(selectedCnddbLayer)) {
+        map.reorder(selectedCnddbLayer, map.layers.length - 1)
+      }
+      if (sketchLayer && map.layers.includes(sketchLayer)) {
+        map.reorder(sketchLayer, map.layers.length - 1)
+      }
+    }
+    const layerOrderHandle = map.layers.on('after-add', () => {
+      window.setTimeout(bringReviewLayersToFront, 0)
+    })
+    bringReviewLayersToFront()
 
     const view = new MapView({
       container: containerRef.current,
@@ -419,20 +438,20 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       if (geometryType === 'point' || geometryType === 'multipoint') {
         return new SimpleMarkerSymbol({
           style: 'circle',
-          color: [255, 255, 255, 0.35],
-          size: 18,
-          outline: { color: [25, 91, 255, 1], width: 4 },
+          color: [255, 231, 82, 0.35],
+          size: 20,
+          outline: { color: [20, 20, 20, 1], width: 4 },
         })
       }
       if (geometryType === 'polyline') {
         return new SimpleLineSymbol({
-          color: [25, 91, 255, 1],
-          width: 5,
+          color: [255, 231, 82, 1],
+          width: 6,
         })
       }
       return new SimpleFillSymbol({
-        color: [255, 255, 255, 0.08],
-        outline: { color: [25, 91, 255, 1], width: 4 },
+        color: [255, 231, 82, 0.14],
+        outline: { color: [20, 20, 20, 1], width: 5 },
       })
     }
 
@@ -570,8 +589,10 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     view.when(() => {
       view.ui.move('zoom', 'bottom-left')
+      bringReviewLayersToFront()
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
+          bringReviewLayersToFront()
           const fieldNames = new Set(cnddbOutputLayer.fields.map((field) => field.name.toLowerCase()))
           const reviewedPotentialField = fieldNames.has('reviewed_potential') ? cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'reviewed_potential')?.name : ''
           if (reviewedPotentialField) {
@@ -606,6 +627,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     return () => {
       window.clearInterval(interval)
+      layerOrderHandle.remove()
       mapClickHandle.remove()
       cnddbVisibilityHandle?.remove()
       layerList.destroy()
