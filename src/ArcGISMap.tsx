@@ -7,6 +7,7 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Sketch from '@arcgis/core/widgets/Sketch'
 import LayerList from '@arcgis/core/widgets/LayerList'
+import Measurement from '@arcgis/core/widgets/Measurement'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
@@ -43,7 +44,7 @@ export type ProjectSketchSummary = {
 }
 
 type ArcGISMapProps = {
-  activeMapTool?: 'layers' | 'sketch' | null
+  activeMapTool?: 'layers' | 'measure' | 'sketch' | null
   webMapId?: string
   projectLayerUrl?: string
   bufferLayerUrl?: string
@@ -53,6 +54,9 @@ type ArcGISMapProps = {
   reviewMode?: boolean
   onProjectSketchChange?: (summary: ProjectSketchSummary) => void
   onRemoveMapLayer?: (id: string) => void
+  onRemoveProjectLayer?: () => void
+  onRemoveBufferLayer?: () => void
+  onRemoveCnddbLayer?: () => void
   onSelectSpeciesFromMap?: (commonName: string) => void
 }
 
@@ -123,12 +127,55 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
+function ptoPotentialRenderer(valueExpression?: string) {
+  return {
+    type: 'unique-value' as const,
+    ...(valueExpression
+      ? { valueExpression, valueExpressionTitle: 'PTO potential' }
+      : { field: 'PTO_Review' }),
+    defaultSymbol: {
+      type: 'simple-fill' as const,
+      color: [126, 144, 162, 0.28],
+      outline: { color: [88, 103, 119, 0.9], width: 0.8 },
+    },
+    uniqueValueInfos: [
+      {
+        value: 'High',
+        label: 'High',
+        symbol: { type: 'simple-fill' as const, color: [218, 67, 67, 0.42], outline: { color: [151, 34, 34, 1], width: 1.2 } },
+      },
+      {
+        value: 'Moderate',
+        label: 'Moderate',
+        symbol: { type: 'simple-fill' as const, color: [241, 156, 55, 0.4], outline: { color: [178, 101, 19, 1], width: 1.1 } },
+      },
+      {
+        value: 'Low',
+        label: 'Low',
+        symbol: { type: 'simple-fill' as const, color: [62, 157, 122, 0.36], outline: { color: [29, 113, 82, 1], width: 1 } },
+      },
+      {
+        value: 'No Potential',
+        label: 'No Potential',
+        symbol: { type: 'simple-fill' as const, color: [111, 125, 139, 0.18], outline: { color: [91, 103, 116, 0.75], width: 0.8 } },
+      },
+      {
+        value: 'Needs Review',
+        label: 'Needs Review',
+        symbol: { type: 'simple-fill' as const, color: [116, 86, 176, 0.34], outline: { color: [87, 56, 143, 1], width: 1.1 } },
+      },
+    ],
+  }
+}
+
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onRemoveProjectLayer, onRemoveBufferLayer, onRemoveCnddbLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
+  const measureRef = useRef<HTMLDivElement | null>(null)
   const sketchRef = useRef<HTMLDivElement | null>(null)
   const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
   const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
+  const activeMapToolRef = useRef(activeMapTool)
   const onSelectSpeciesFromMapRef = useRef(onSelectSpeciesFromMap)
 
   useEffect(() => {
@@ -140,11 +187,15 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   }, [selectedSpeciesName])
 
   useEffect(() => {
+    activeMapToolRef.current = activeMapTool
+  }, [activeMapTool])
+
+  useEffect(() => {
     onSelectSpeciesFromMapRef.current = onSelectSpeciesFromMap
   }, [onSelectSpeciesFromMap])
 
   useEffect(() => {
-    if (!containerRef.current || !layerListRef.current || !sketchRef.current) return
+    if (!containerRef.current || !layerListRef.current || !measureRef.current || !sketchRef.current) return
 
     const projectLayer = new GraphicsLayer({ title: 'Project input', listMode: 'hide' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results', listMode: 'hide' })
@@ -152,6 +203,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input', listMode: 'hide' })
     const bufferOutputLayer = bufferLayerUrl?.trim()
       ? new FeatureLayer({
+        id: 'pto-buffer-output',
         url: bufferLayerUrl.trim(),
         title: 'PTO buffer',
         outFields: ['*'],
@@ -173,47 +225,13 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       : null
     const cnddbOutputLayer = cnddbLayerUrl?.trim()
       ? new FeatureLayer({
+        id: 'pto-cnddb-output',
         url: cnddbLayerUrl.trim(),
         title: 'CNDDB output results',
         outFields: ['*'],
         opacity: 0.72,
         popupEnabled: true,
-        renderer: {
-          type: 'unique-value',
-          field: 'PTO_Review',
-          defaultSymbol: {
-            type: 'simple-fill',
-            color: [126, 144, 162, 0.28],
-            outline: { color: [88, 103, 119, 0.9], width: 0.8 },
-          },
-          uniqueValueInfos: [
-            {
-              value: 'High',
-              label: 'High',
-              symbol: { type: 'simple-fill', color: [218, 67, 67, 0.42], outline: { color: [151, 34, 34, 1], width: 1.2 } },
-            },
-            {
-              value: 'Moderate',
-              label: 'Moderate',
-              symbol: { type: 'simple-fill', color: [241, 156, 55, 0.4], outline: { color: [178, 101, 19, 1], width: 1.1 } },
-            },
-            {
-              value: 'Low',
-              label: 'Low',
-              symbol: { type: 'simple-fill', color: [62, 157, 122, 0.36], outline: { color: [29, 113, 82, 1], width: 1 } },
-            },
-            {
-              value: 'No Potential',
-              label: 'No Potential',
-              symbol: { type: 'simple-fill', color: [111, 125, 139, 0.18], outline: { color: [91, 103, 116, 0.75], width: 0.8 } },
-            },
-            {
-              value: 'Needs Review',
-              label: 'Needs Review',
-              symbol: { type: 'simple-fill', color: [116, 86, 176, 0.34], outline: { color: [87, 56, 143, 1], width: 1.1 } },
-            },
-          ],
-        },
+        renderer: ptoPotentialRenderer(),
         popupTemplate: {
           title: '{CNAME}',
           content: [
@@ -224,6 +242,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
                 { fieldName: 'SNAME', label: 'Scientific name' },
                 { fieldName: 'ELMCODE', label: 'Element code' },
                 { fieldName: 'PTO_Review', label: 'PTO review' },
+                { fieldName: 'reviewed_potential', label: 'Reviewed potential' },
                 { fieldName: 'Distance', label: 'Distance' },
                 { fieldName: 'MIN_buff', label: 'Nearest distance (mi)' },
                 { fieldName: 'ACCURACY', label: 'Accuracy' },
@@ -279,6 +298,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const sketchContainer = document.createElement('div')
     sketchRef.current.replaceChildren(sketchContainer)
+    const measureContainer = document.createElement('div')
+    measureRef.current.replaceChildren(measureContainer)
 
     const sketch = new Sketch({
       view,
@@ -322,6 +343,12 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       }),
     })
 
+    const measurement = new Measurement({
+      view,
+      container: measureContainer,
+      activeTool: activeMapToolRef.current === 'measure' ? 'distance' : null,
+    })
+
     const layerListContainer = document.createElement('div')
     layerListRef.current.replaceChildren(layerListContainer)
 
@@ -331,17 +358,21 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       listItemCreatedFunction: (event) => {
         const layer = event.item.layer as FeatureLayer | undefined
         const addedLayer = mapAddedLayers.find((candidate) => `map-added-${candidate.id}` === layer?.id)
-        if (!addedLayer) return
+        const appLayerId = addedLayer?.id
+          ?? (layer?.id === 'project-input-service' ? 'project-input-service' : null)
+          ?? (layer?.id === 'pto-buffer-output' ? 'pto-buffer-output' : null)
+          ?? (layer?.id === 'pto-cnddb-output' ? 'pto-cnddb-output' : null)
+        if (!appLayerId) return
         event.item.actionsSections = [[{
           type: 'button',
           title: 'Zoom to',
           className: 'esri-icon-zoom-in-magnifying-glass',
-          id: `zoom-${addedLayer.id}`,
+          id: `zoom-${appLayerId}`,
         }, {
           type: 'button',
           title: 'Remove layer',
           className: 'esri-icon-trash',
-          id: `remove-${addedLayer.id}`,
+          id: `remove-${appLayerId}`,
         }]]
       },
     })
@@ -364,6 +395,18 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         return
       }
       const match = String(event.action.id).match(/^remove-(.+)$/)
+      if (match?.[1] === 'project-input-service') {
+        onRemoveProjectLayer?.()
+        return
+      }
+      if (match?.[1] === 'pto-buffer-output') {
+        onRemoveBufferLayer?.()
+        return
+      }
+      if (match?.[1] === 'pto-cnddb-output') {
+        onRemoveCnddbLayer?.()
+        return
+      }
       if (match) onRemoveMapLayer?.(match[1])
     })
 
@@ -473,6 +516,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       projectLayer.removeAll()
 
       const layer = new FeatureLayer({
+        id: 'project-input-service',
         url,
         title: 'Project feature service input',
         outFields: ['*'],
@@ -526,6 +570,11 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       view.ui.move('zoom', 'bottom-left')
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
+          const fieldNames = new Set(cnddbOutputLayer.fields.map((field) => field.name.toLowerCase()))
+          const reviewedPotentialField = fieldNames.has('reviewed_potential') ? cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'reviewed_potential')?.name : ''
+          if (reviewedPotentialField) {
+            cnddbOutputLayer.renderer = ptoPotentialRenderer(`IIf(!IsEmpty($feature.${reviewedPotentialField}), $feature.${reviewedPotentialField}, $feature.PTO_Review)`)
+          }
           const targetExtent = bufferOutputLayer?.fullExtent ?? cnddbOutputLayer.fullExtent
           if (targetExtent) {
             void view.goTo(targetExtent.expand(1.2), { duration: 700 })
@@ -546,6 +595,11 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       if (loadedSpeciesName !== nextSpeciesName) {
         void applySelectedSpecies(nextSpeciesName)
       }
+
+      const desiredMeasurementTool = activeMapToolRef.current === 'measure' ? 'distance' : null
+      if (measurement.activeTool !== desiredMeasurementTool) {
+        measurement.activeTool = desiredMeasurementTool
+      }
     }, 600)
 
     return () => {
@@ -553,18 +607,20 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       mapClickHandle.remove()
       layerList.destroy()
       sketch.destroy()
+      measurement.destroy()
       projectFeatureLayer?.destroy()
       userAddedFeatureLayers.forEach((layer) => layer.destroy())
       bufferOutputLayer?.destroy()
       cnddbOutputLayer?.destroy()
       view.destroy()
     }
-  }, [bufferLayerUrl, cnddbLayerUrl, mapAddedLayers, onProjectSketchChange, reviewMode, webMapId])
+  }, [bufferLayerUrl, cnddbLayerUrl, mapAddedLayers, onProjectSketchChange, onRemoveBufferLayer, onRemoveCnddbLayer, onRemoveMapLayer, onRemoveProjectLayer, reviewMode, webMapId])
 
   return (
     <div className="arcgis-map-shell">
       <div className="arcgis-map" ref={containerRef} />
       <div className={`map-widget-panel layer-widget-panel ${activeMapTool === 'layers' ? 'open' : ''}`} ref={layerListRef} />
+      <div className={`map-widget-panel measure-widget-panel ${activeMapTool === 'measure' ? 'open' : ''}`} ref={measureRef} />
       <div className={`map-widget-panel sketch-widget-panel ${!reviewMode && activeMapTool === 'sketch' ? 'open' : ''}`} ref={sketchRef} />
     </div>
   )

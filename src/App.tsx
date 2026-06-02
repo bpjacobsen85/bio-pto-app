@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
   ChevronRight,
@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Ruler,
   Search,
   Settings2,
   ShieldCheck,
@@ -25,7 +26,7 @@ import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
-type MapTool = 'layers' | 'sketch' | null
+type MapTool = 'layers' | 'measure' | 'sketch' | null
 type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
 type LayerBrowserMode = 'project-input' | 'map-layer'
@@ -838,11 +839,6 @@ function App() {
   const isReviewingResults = setupCollapsed && hasResults
   const hasSpeciesFilters = speciesTypeFilter !== 'All' || ratingFilter !== null || conservationFilters.length > 0
 
-  useEffect(() => {
-    setReviewSaveStatus('idle')
-    setReviewSaveMessage('')
-  }, [selectedSpeciesId])
-
   async function ensureSignedIn() {
     if (user) return user
     if (signInPromiseRef.current) return signInPromiseRef.current
@@ -892,11 +888,34 @@ function App() {
     setActiveMapTool((current) => current === tool ? null : tool)
   }
 
+  function selectSpeciesForReview(objectId: number | null) {
+    setSelectedSpeciesId(objectId)
+    setReviewSaveStatus('idle')
+    setReviewSaveMessage('')
+  }
+
+  const handleRemoveMapLayer = useCallback((id: string) => {
+    setMapAddedLayers((current) => current.filter((layer) => layer.id !== id))
+  }, [])
+
+  const handleRemoveProjectLayer = useCallback(() => {
+    setProjectLayerUrl('')
+    setLoadedProjectLayerUrl('')
+  }, [])
+
+  const handleRemoveBufferLayer = useCallback(() => {
+    setBufferLayerUrl('')
+  }, [])
+
+  const handleRemoveCnddbLayer = useCallback(() => {
+    setCnddbLayerUrl('')
+  }, [])
+
   function clearSpeciesFilters() {
     setSpeciesTypeFilter('All')
     setRatingFilter(null)
     setConservationFilters([])
-    setSelectedSpeciesId(speciesResults[0]?.objectId ?? null)
+    selectSpeciesForReview(speciesResults[0]?.objectId ?? null)
   }
 
   function handleSelectSpeciesFromMap(commonName: string) {
@@ -910,7 +929,7 @@ function App() {
       setRatingFilter(null)
       setConservationFilters([])
     }
-    setSelectedSpeciesId(matchedSpecies.objectId)
+    selectSpeciesForReview(matchedSpecies.objectId)
   }
 
   function updatePtoCriteria(key: keyof PtoCriteria, value: string) {
@@ -1788,12 +1807,13 @@ function App() {
           <div className="map-toolbar">
             <button className="tool-button" type="button" onClick={handleBrowseMapLayers}><Plus size={17} /> Add data</button>
             <button className={`tool-button ${activeMapTool === 'layers' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('layers')}><Layers3 size={17} /> Layers</button>
+            <button className={`tool-button ${activeMapTool === 'measure' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('measure')}><Ruler size={17} /> Measure</button>
             {!isReviewingResults && (
               <button className={`tool-button ${activeMapTool === 'sketch' ? 'active' : ''}`} type="button" onClick={() => toggleMapTool('sketch')}><PencilLine size={17} /> Sketch</button>
             )}
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={(id) => setMapAddedLayers((current) => current.filter((layer) => layer.id !== id))} onSelectSpeciesFromMap={handleSelectSpeciesFromMap} />
+            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={handleRemoveMapLayer} onRemoveProjectLayer={handleRemoveProjectLayer} onRemoveBufferLayer={handleRemoveBufferLayer} onRemoveCnddbLayer={handleRemoveCnddbLayer} onSelectSpeciesFromMap={handleSelectSpeciesFromMap} />
           </div>
         </section>
 
@@ -1966,7 +1986,7 @@ function App() {
             </div>
             <div className="species-list">
               {filteredSpeciesResults.slice(0, 120).map((row) => (
-                <button className={`species-row ${finalPotentialForSpecies(row, reviewEdits).toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => setSelectedSpeciesId(row.objectId)}>
+                <button className={`species-row ${finalPotentialForSpecies(row, reviewEdits).toLowerCase().replaceAll(' ', '-')} ${selectedSpecies?.objectId === row.objectId ? 'selected' : ''}`} type="button" key={row.objectId} onClick={() => selectSpeciesForReview(row.objectId)}>
                   <RatingPill rating={finalPotentialForSpecies(row, reviewEdits)} />
                   <span className="species-name">
                     <strong>{row.common}</strong>
