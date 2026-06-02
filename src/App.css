@@ -340,6 +340,38 @@ h3 {
   color: #536272;
 }
 
+.browser-search-row button.active,
+.browser-search-row button:hover {
+  color: #174f78;
+  background: #eef6fb;
+}
+
+.browser-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf1f5;
+  background: #f7fafc;
+}
+
+.browser-filter-panel label {
+  display: grid;
+  gap: 4px;
+  color: #536272;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.browser-filter-panel select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #cfd9e3;
+  background: #fff;
+  color: #263542;
+  font: inherit;
+}
+
 .browser-folder-row {
   min-height: 38px;
   margin: 10px 12px 8px;

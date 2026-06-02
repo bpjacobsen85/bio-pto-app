@@ -31,6 +31,8 @@ type SpeciesTypeFilter = 'All' | 'Plants' | 'Animals'
 type ConservationFilter = string
 type LayerBrowserMode = 'project-input' | 'map-layer'
 type PortalSearchScope = 'mine' | 'organization' | 'arcgis'
+type PortalSortField = 'modified' | 'title'
+type PortalSortOrder = 'desc' | 'asc'
 type ReviewStatus = 'Not Started' | 'In Review' | 'Reviewed' | 'Needs Senior Review'
 type ReportStatus = 'idle' | 'generating' | 'ready' | 'error'
 type AnalysisStatus = 'idle' | 'submitting' | 'running' | 'ready' | 'error'
@@ -610,6 +612,10 @@ function App() {
   const [portalFolders, setPortalFolders] = useState<PortalFolder[]>([])
   const [selectedPortalFolderId, setSelectedPortalFolderId] = useState('all')
   const [portalLayerSearch, setPortalLayerSearch] = useState('')
+  const [portalSortField, setPortalSortField] = useState<PortalSortField>('modified')
+  const [portalSortOrder, setPortalSortOrder] = useState<PortalSortOrder>('desc')
+  const [portalResultLimit, setPortalResultLimit] = useState(20)
+  const [browserFiltersOpen, setBrowserFiltersOpen] = useState(false)
   const [selectedPortalItem, setSelectedPortalItem] = useState<PortalLayerItem | null>(null)
   const [openPortalDetailSection, setOpenPortalDetailSection] = useState<'description' | 'details' | null>(null)
   const [portalSublayers, setPortalSublayers] = useState<PortalSublayer[]>([])
@@ -978,7 +984,40 @@ function App() {
     return 'Loading your ArcGIS feature services...'
   }
 
-  async function loadPortalLayerItems(searchText = portalLayerSearch, scope = portalSearchScope, folderId = selectedPortalFolderId) {
+  function sortPortalItems(items: PortalLayerItem[], sortField = portalSortField, sortOrder = portalSortOrder) {
+    return [...items].sort((a, b) => {
+      if (sortField === 'title') {
+        const comparison = a.title.localeCompare(b.title)
+        return sortOrder === 'asc' ? comparison : -comparison
+      }
+      const comparison = (a.modified ?? 0) - (b.modified ?? 0)
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+  }
+
+  function handlePortalFilterChange(update: { sortField?: PortalSortField; sortOrder?: PortalSortOrder; resultLimit?: number }) {
+    const nextSortField = update.sortField ?? portalSortField
+    const nextSortOrder = update.sortOrder ?? portalSortOrder
+    const nextResultLimit = update.resultLimit ?? portalResultLimit
+    setPortalSortField(nextSortField)
+    setPortalSortOrder(nextSortOrder)
+    setPortalResultLimit(nextResultLimit)
+    void loadPortalLayerItems(portalLayerSearch, portalSearchScope, selectedPortalFolderId, {
+      sortField: nextSortField,
+      sortOrder: nextSortOrder,
+      resultLimit: nextResultLimit,
+    })
+  }
+
+  async function loadPortalLayerItems(
+    searchText = portalLayerSearch,
+    scope = portalSearchScope,
+    folderId = selectedPortalFolderId,
+    options: { sortField?: PortalSortField; sortOrder?: PortalSortOrder; resultLimit?: number } = {},
+  ) {
+    const sortField = options.sortField ?? portalSortField
+    const sortOrder = options.sortOrder ?? portalSortOrder
+    const resultLimit = options.resultLimit ?? portalResultLimit
     const requestId = portalLayerRequestIdRef.current + 1
     portalLayerRequestIdRef.current = requestId
     setLayerBrowserOpen(true)
@@ -1019,11 +1058,11 @@ function App() {
         const data = await response.json() as { error?: { message?: string }; items?: Array<PortalLayerItem> }
         if (data.error) throw new Error(data.error.message ?? 'ArcGIS folder returned an error.')
         const loweredTerm = term.toLowerCase()
-        layers = (data.items ?? [])
+        layers = sortPortalItems((data.items ?? [])
           .filter((item) => item.url && item.type === 'Feature Service')
           .filter((item) => !loweredTerm || item.title.toLowerCase().includes(loweredTerm))
-          .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
-          .slice(0, 20)
+          , sortField, sortOrder)
+          .slice(0, resultLimit)
           .map((item) => mapPortalItem(item, token))
       } else {
         const search = new URL(`${arcgisPortalUrl}/sharing/rest/search`)
@@ -1036,9 +1075,9 @@ function App() {
         search.searchParams.set('f', 'json')
         search.searchParams.set('token', token)
         search.searchParams.set('q', `${scopeClause ? `${scopeClause} AND ` : ''}type:"Feature Service"${termClause}`)
-        search.searchParams.set('sortField', 'modified')
-        search.searchParams.set('sortOrder', 'desc')
-        search.searchParams.set('num', '20')
+        search.searchParams.set('sortField', sortField)
+        search.searchParams.set('sortOrder', sortOrder)
+        search.searchParams.set('num', String(resultLimit))
 
         const response = await fetch(search.toString())
         if (!response.ok) throw new Error(`ArcGIS search failed: ${response.status}`)
@@ -1083,6 +1122,22 @@ function App() {
   function handlePortalFolderChange(nextFolderId: string) {
     setSelectedPortalFolderId(nextFolderId)
     void loadPortalLayerItems(portalLayerSearch, portalSearchScope, nextFolderId)
+  }
+
+  function handlePortalCollectionChange(nextCollection: string) {
+    if (nextCollection === 'source:mine') {
+      handlePortalSourceChange('mine')
+      return
+    }
+    if (nextCollection === 'source:organization') {
+      handlePortalSourceChange('organization')
+      return
+    }
+    if (nextCollection === 'source:arcgis') {
+      handlePortalSourceChange('arcgis')
+      return
+    }
+    handlePortalFolderChange(nextCollection)
   }
 
   function handleOpenSelectedPortalItem() {
@@ -1321,6 +1376,10 @@ function App() {
     setPortalSearchScope('mine')
     setPortalLayerItems([])
     setPortalLayerSearch('')
+    setPortalSortField('modified')
+    setPortalSortOrder('desc')
+    setPortalResultLimit(20)
+    setBrowserFiltersOpen(false)
     setSelectedPortalItem(null)
     setPortalSublayers([])
     setLayerBrowserStatus('idle')
@@ -1583,26 +1642,56 @@ function App() {
                     }}
                     placeholder="Search"
                   />
-                  <button type="button" aria-label="Search layers" onClick={() => void loadPortalLayerItems(portalLayerSearch, portalSearchScope, selectedPortalFolderId)}>
+                  <button
+                    type="button"
+                    className={browserFiltersOpen ? 'active' : ''}
+                    aria-label="Filter layer search"
+                    aria-expanded={browserFiltersOpen}
+                    onClick={() => setBrowserFiltersOpen((current) => !current)}
+                  >
                     <Settings2 size={15} />
                   </button>
                 </div>
-                <div className={`browser-folder-row ${portalSearchScope === 'mine' ? 'has-select' : ''}`} aria-label="Current layer search folder">
+                {browserFiltersOpen && (
+                  <div className="browser-filter-panel" aria-label="Layer search filters">
+                    <label>
+                      <span>Sort by</span>
+                      <select value={portalSortField} onChange={(event) => handlePortalFilterChange({ sortField: event.target.value as PortalSortField })}>
+                        <option value="modified">Modified date</option>
+                        <option value="title">Title</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Order</span>
+                      <select value={portalSortOrder} onChange={(event) => handlePortalFilterChange({ sortOrder: event.target.value as PortalSortOrder })}>
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Results</span>
+                      <select value={portalResultLimit} onChange={(event) => handlePortalFilterChange({ resultLimit: Number(event.target.value) })}>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+                <div className="browser-folder-row has-select" aria-label="Current layer search collection">
                   <FolderOpen size={16} />
-                  {portalSearchScope === 'mine' ? (
-                    <select
-                      aria-label="Content folder"
-                      value={selectedPortalFolderId}
-                      onChange={(event) => handlePortalFolderChange(event.target.value)}
-                    >
-                      <option value="all">All my content</option>
-                      {portalFolders.map((folder) => (
-                        <option value={folder.id} key={folder.id}>{folder.title}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span>{portalSearchScope === 'organization' ? 'All organization content' : 'ArcGIS Online content'}</span>
-                  )}
+                  <select
+                    aria-label="Content collection"
+                    value={portalSearchScope === 'mine' ? selectedPortalFolderId : `source:${portalSearchScope}`}
+                    onChange={(event) => handlePortalCollectionChange(event.target.value)}
+                  >
+                    <option value={portalSearchScope === 'mine' ? 'all' : 'source:mine'}>All my content</option>
+                    {portalSearchScope === 'mine' && portalFolders.map((folder) => (
+                      <option value={folder.id} key={folder.id}>{folder.title}</option>
+                    ))}
+                    <option value="source:organization">All organization content</option>
+                    <option value="source:arcgis">ArcGIS Online content</option>
+                  </select>
                 </div>
                 <p className={`browser-message ${layerBrowserStatus === 'error' ? 'error' : ''}`}>{layerBrowserMessage}</p>
                 {layerBrowserStatus === 'loading' && <div className="browser-loading">Searching ArcGIS Online...</div>}
