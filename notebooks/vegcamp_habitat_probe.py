@@ -16,6 +16,13 @@ Optional:
   set ARCGIS_TOKEN=... if the AOI layer is private.
 """
 
+# %% [markdown]
+# # 1. Setup and service constants
+#
+# Run this first. It imports standard-library modules only and defines the
+# public VegCAMP/CAL FIRE service URLs used by the probe.
+
+# %%
 from __future__ import annotations
 
 import argparse
@@ -64,6 +71,14 @@ COVERAGE_FIELDS = [
 ]
 
 
+# %% [markdown]
+# # 2. ArcGIS REST helpers
+#
+# These helpers make small ArcGIS REST requests, read layer metadata, and get an
+# AOI layer extent. If your AOI layer is private, set `ARCGIS_TOKEN` before
+# running the notebook/script.
+
+# %%
 def rest_request(url: str, params: dict[str, Any], method: str = "POST", timeout: int = 60) -> dict[str, Any]:
     encoded = urllib.parse.urlencode(params).encode("utf-8")
     request_url = url if method.upper() == "POST" else f"{url}?{encoded.decode('utf-8')}"
@@ -114,6 +129,13 @@ def query_layer_extent(layer_url: str, token: str | None) -> dict[str, Any]:
     return extent
 
 
+# %% [markdown]
+# # 3. AOI geometry helpers
+#
+# These helpers load an ArcGIS polygon/envelope JSON file, derive extents, and
+# build simple point-in-polygon tests for optional WHR13 sampling.
+
+# %%
 def load_geometry_json(path: str) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as handle:
         geometry = json.load(handle)
@@ -167,6 +189,14 @@ def point_in_polygon(x: float, y: float, polygon: dict[str, Any]) -> bool:
     return any(point_in_ring(x, y, ring) for ring in rings)
 
 
+# %% [markdown]
+# # 4. VegCAMP coverage query
+#
+# This queries the detailed VegCAMP mapping-area index (`ds515`) and the
+# sampling-only index (`ds3103`) against your AOI/buffer. These are coverage
+# footprints, not the detailed vegetation polygons themselves.
+
+# %%
 def query_intersecting_coverage(
     layer_url: str,
     geometry: dict[str, Any],
@@ -200,6 +230,14 @@ def query_intersecting_coverage(
     return rows
 
 
+# %% [markdown]
+# # 5. CAL FIRE WHR13 sample-grid fallback
+#
+# This builds a regular grid inside the AOI and calls CAL FIRE WHR13 identify at
+# each sample point. Treat the output as review context/sample frequency, not a
+# clipped acreage calculation.
+
+# %%
 def build_grid_points(
     geometry: dict[str, Any],
     extent: dict[str, Any],
@@ -279,6 +317,13 @@ def sample_whr13(
     return samples
 
 
+# %% [markdown]
+# # 6. Output helpers and runnable workflow
+#
+# Use `main()` from the command line, or copy the manual-run block below into a
+# notebook cell and uncomment it to step through.
+
+# %%
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
@@ -312,6 +357,42 @@ def summarize_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "sample_percent": round((count / total) * 100, 1) if total else 0,
         })
     return sorted(summary, key=lambda row: (-row["sample_count"], row["whr13"], row["whr_name"]))
+
+
+# Manual notebook recipe:
+#
+# AOI_LAYER_URL = "https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/Test_Tool_Input/FeatureServer/0"
+# TOKEN = os.environ.get("ARCGIS_TOKEN") or None
+# OUT_DIR = Path("bio_pto_local_runs/vegcamp_probe_manual")
+# OUT_DIR.mkdir(parents=True, exist_ok=True)
+#
+# metadata = query_layer_metadata(AOI_LAYER_URL, TOKEN)
+# extent = query_layer_extent(AOI_LAYER_URL, TOKEN)
+# geometry = extent
+# geometry_type = "esriGeometryEnvelope"
+#
+# mapping_rows = query_intersecting_coverage(
+#     VEGCAMP_MAPPING_AREAS_URL,
+#     geometry,
+#     geometry_type,
+#     "VegCAMP mapping area ds515",
+#     token=None,
+# )
+# sampling_rows = query_intersecting_coverage(
+#     VEGCAMP_SAMPLING_ONLY_AREAS_URL,
+#     geometry,
+#     geometry_type,
+#     "VegCAMP sampling-only area ds3103",
+#     token=None,
+# )
+# coverage_rows = mapping_rows + sampling_rows
+# write_csv(OUT_DIR / "vegcamp_coverage.csv", coverage_rows)
+# coverage_rows[:5]
+#
+# samples = sample_whr13(geometry, extent, grid_size=4, max_samples=16, timeout=60)
+# sample_summary = summarize_samples(samples)
+# write_csv(OUT_DIR / "whr13_sample_summary.csv", sample_summary)
+# sample_summary
 
 
 def main() -> int:
