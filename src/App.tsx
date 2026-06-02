@@ -617,6 +617,7 @@ function App() {
   const [layerBrowserMessage, setLayerBrowserMessage] = useState('Sign in to browse ArcGIS feature services.')
   const [mapAddedLayers, setMapAddedLayers] = useState<MapAddedLayer[]>([])
   const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
+  const portalLayerRequestIdRef = useRef(0)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
@@ -944,12 +945,29 @@ function App() {
     }
   }
 
+  function portalCollectionLabel(scope: PortalSearchScope, folderId = selectedPortalFolderId) {
+    if (scope === 'organization') return 'All organization content'
+    if (scope === 'arcgis') return 'ArcGIS Online content'
+    if (folderId === 'all') return 'All my content'
+    return portalFolders.find((folder) => folder.id === folderId)?.title ?? 'Selected folder'
+  }
+
+  function portalLoadingMessage(scope: PortalSearchScope, folderId = selectedPortalFolderId) {
+    if (scope === 'organization') return 'Loading organization feature services...'
+    if (scope === 'arcgis') return 'Loading ArcGIS Online feature services...'
+    if (folderId !== 'all') return `Loading ${portalCollectionLabel(scope, folderId)}...`
+    return 'Loading your ArcGIS feature services...'
+  }
+
   async function loadPortalLayerItems(searchText = portalLayerSearch, scope = portalSearchScope, folderId = selectedPortalFolderId) {
+    const requestId = portalLayerRequestIdRef.current + 1
+    portalLayerRequestIdRef.current = requestId
     setLayerBrowserOpen(true)
     setSelectedPortalItem(null)
     setPortalSublayers([])
+    setPortalLayerItems([])
     setLayerBrowserStatus('loading')
-    setLayerBrowserMessage('Loading your ArcGIS feature services...')
+    setLayerBrowserMessage(portalLoadingMessage(scope, folderId))
 
     try {
       const signedInUser = await ensureSignedIn()
@@ -963,6 +981,7 @@ function App() {
         const foldersResponse = await fetch(foldersUrl.toString())
         if (foldersResponse.ok) {
           const foldersData = await foldersResponse.json() as { folders?: PortalFolder[] }
+          if (requestId !== portalLayerRequestIdRef.current) return
           setPortalFolders((foldersData.folders ?? []).map((folder) => ({ id: folder.id, title: folder.title })).sort((a, b) => a.title.localeCompare(b.title)))
         }
       } else {
@@ -1011,10 +1030,12 @@ function App() {
           .map((item) => mapPortalItem(item, token))
       }
 
+      if (requestId !== portalLayerRequestIdRef.current) return
       setPortalLayerItems(layers)
       setLayerBrowserStatus('ready')
-      setLayerBrowserMessage(layers.length ? 'Select a service to inspect its layers, or add the first layer directly.' : 'No feature services were found for the current source and search.')
+      setLayerBrowserMessage(layers.length ? `Showing ${portalCollectionLabel(scope, folderId)}. Select a service to inspect its layers, or add the first layer directly.` : `No feature services were found in ${portalCollectionLabel(scope, folderId)} for the current search.`)
     } catch (error) {
+      if (requestId !== portalLayerRequestIdRef.current) return
       setLayerBrowserStatus('error')
       setLayerBrowserMessage(error instanceof Error ? error.message : 'Could not browse ArcGIS feature services.')
     }
@@ -1538,12 +1559,12 @@ function App() {
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault()
-                        void loadPortalLayerItems(event.currentTarget.value)
+                        void loadPortalLayerItems(event.currentTarget.value, portalSearchScope, selectedPortalFolderId)
                       }
                     }}
                     placeholder="Search"
                   />
-                  <button type="button" aria-label="Search layers" onClick={() => void loadPortalLayerItems()}>
+                  <button type="button" aria-label="Search layers" onClick={() => void loadPortalLayerItems(portalLayerSearch, portalSearchScope, selectedPortalFolderId)}>
                     <Settings2 size={15} />
                   </button>
                 </div>
