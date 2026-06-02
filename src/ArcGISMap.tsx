@@ -199,7 +199,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const projectLayer = new GraphicsLayer({ title: 'Project input', listMode: 'hide' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results', listMode: 'hide' })
-    const selectedCnddbLayer = new GraphicsLayer({ title: 'Selected CNDDB species', listMode: 'hide' })
+    const selectedCnddbLayer = new GraphicsLayer({ title: 'Selected CNDDB species', listMode: 'hide', visible: false })
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input', listMode: 'hide' })
     const bufferOutputLayer = bufferLayerUrl?.trim()
       ? new FeatureLayer({
@@ -411,6 +411,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     })
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
+    const syncSelectedCnddbLayerVisibility = () => {
+      selectedCnddbLayer.visible = Boolean(cnddbOutputLayer?.visible && selectedSpeciesRef.current)
+    }
 
     const selectedSymbolForGeometry = (geometryType: string | undefined) => {
       if (geometryType === 'point' || geometryType === 'multipoint') {
@@ -435,6 +438,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const updateSelectedSpeciesHighlight = async (commonName: string) => {
       selectedCnddbLayer.removeAll()
+      syncSelectedCnddbLayerVisibility()
       if (!cnddbOutputLayer || !commonName) return null
 
       try {
@@ -450,6 +454,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
           attributes: feature.attributes,
           symbol,
         })))
+        syncSelectedCnddbLayerVisibility()
         return features
       } catch {
         return null
@@ -461,13 +466,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       if (!cnddbOutputLayer) return
 
       cnddbOutputLayer.definitionExpression = '1=1'
-      cnddbOutputLayer.featureEffect = commonName
-        ? {
-          filter: { where: `CNAME = '${escapeSqlLiteral(commonName)}'` },
-          includedEffect: 'brightness(125%) saturate(135%)',
-          excludedEffect: 'grayscale(65%) opacity(32%)',
-        }
-        : null
+      cnddbOutputLayer.featureEffect = null
       const selectedFeatures = await updateSelectedSpeciesHighlight(commonName)
 
       if (!commonName) return
@@ -495,6 +494,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       } catch {
         // Map selection should never interrupt normal pan/zoom/popup interaction.
       }
+    })
+    const cnddbVisibilityHandle = cnddbOutputLayer?.watch('visible', () => {
+      syncSelectedCnddbLayerVisibility()
     })
 
     const loadProjectFeatureLayer = async (url: string) => {
@@ -605,6 +607,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     return () => {
       window.clearInterval(interval)
       mapClickHandle.remove()
+      cnddbVisibilityHandle?.remove()
       layerList.destroy()
       sketch.destroy()
       measurement.destroy()
