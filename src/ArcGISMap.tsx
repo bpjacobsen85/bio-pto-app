@@ -236,8 +236,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
           type: 'simple',
           symbol: {
             type: 'simple-fill',
-            color: [0, 178, 219, 0.5],
-            outline: { color: [0, 66, 92, 1], width: 2 },
+            color: [255, 182, 203, 0.38],
+            outline: { color: [190, 82, 118, 0.95], width: 1.4 },
           },
         },
         popupTemplate: {
@@ -455,45 +455,25 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       selectedCnddbLayer.visible = Boolean(cnddbOutputLayer?.visible && selectedSpeciesRef.current)
     }
 
-    const selectedSymbolsForGeometry = (geometryType: string | undefined) => {
+    const selectedSymbolForGeometry = (geometryType: string | undefined) => {
       if (geometryType === 'point' || geometryType === 'multipoint') {
-        return [
-          new SimpleMarkerSymbol({
-            style: 'circle',
-            color: [20, 20, 20, 0.28],
-            size: 26,
-            outline: { color: [20, 20, 20, 1], width: 5 },
-          }),
-          new SimpleMarkerSymbol({
-            style: 'circle',
-            color: [255, 236, 69, 0.72],
-            size: 18,
-            outline: { color: [255, 255, 255, 1], width: 2 },
-          }),
-        ]
+        return new SimpleMarkerSymbol({
+          style: 'circle',
+          color: [222, 38, 38, 0.8],
+          size: 18,
+          outline: { color: [118, 16, 16, 1], width: 3 },
+        })
       }
       if (geometryType === 'polyline') {
-        return [
-          new SimpleLineSymbol({
-            color: [20, 20, 20, 1],
-            width: 9,
-          }),
-          new SimpleLineSymbol({
-            color: [255, 236, 69, 1],
-            width: 5,
-          }),
-        ]
+        return new SimpleLineSymbol({
+          color: [222, 38, 38, 1],
+          width: 5,
+        })
       }
-      return [
-        new SimpleFillSymbol({
-          color: [20, 20, 20, 0.08],
-          outline: { color: [20, 20, 20, 1], width: 7 },
-        }),
-        new SimpleFillSymbol({
-          color: [255, 236, 69, 0.28],
-          outline: { color: [255, 255, 255, 1], width: 2 },
-        }),
-      ]
+      return new SimpleFillSymbol({
+        color: [222, 38, 38, 0.36],
+        outline: { color: [118, 16, 16, 1], width: 3 },
+      })
     }
 
     const updateSelectedSpeciesHighlight = async (commonName: string, requestId: number) => {
@@ -511,12 +491,12 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         query.num = 2000
         const features = await cnddbOutputLayer.queryFeatures(query)
         if (requestId !== selectedSpeciesRequestId) return null
-        const symbols = selectedSymbolsForGeometry(cnddbOutputLayer.geometryType)
-        selectedCnddbLayer.addMany(symbols.flatMap((symbol) => features.features.map((feature) => new Graphic({
+        const symbol = selectedSymbolForGeometry(cnddbOutputLayer.geometryType)
+        selectedCnddbLayer.addMany(features.features.map((feature) => new Graphic({
           geometry: feature.geometry,
           attributes: feature.attributes,
           symbol,
-        }))))
+        })))
         syncSelectedCnddbLayerVisibility()
         return features
       } catch {
