@@ -2,6 +2,7 @@
 import Map from '@arcgis/core/Map'
 import WebMap from '@arcgis/core/WebMap'
 import MapView from '@arcgis/core/views/MapView'
+import type FeatureLayerView from '@arcgis/core/views/layers/FeatureLayerView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Sketch from '@arcgis/core/widgets/Sketch'
@@ -213,7 +214,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         title: 'CNDDB output results',
         outFields: ['*'],
         opacity: 0.72,
-        popupEnabled: false,
+        popupEnabled: true,
         renderer: cnddbDefaultRenderer(),
         popupTemplate: {
           title: '{CNAME}',
@@ -300,6 +301,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     let featureLayerSummary: ProjectSketchSummary | null = null
     let projectFeatureLayer: FeatureLayer | null = null
+    let cnddbLayerView: FeatureLayerView | null = null
     let loadedProjectUrl = ''
     let selectedSpeciesRequestId = 0
     let selectedSpeciesZoomTimeout: number | null = null
@@ -433,14 +435,19 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       }
 
       const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
-      cnddbOutputLayer.definitionExpression = selectedWhere
+      cnddbOutputLayer.definitionExpression = '1=1'
       cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
+      if (cnddbLayerView) {
+        cnddbLayerView.filter = commonName ? { where: selectedWhere } : null
+      }
       if (!commonName) return
 
       selectedSpeciesZoomTimeout = window.setTimeout(() => {
         void (async () => {
           try {
             await cnddbOutputLayer.load()
+            cnddbLayerView ??= await view.whenLayerView(cnddbOutputLayer)
+            cnddbLayerView.filter = { where: selectedWhere }
             if (requestId !== selectedSpeciesRequestId) return
 
             const query = cnddbOutputLayer.createQuery()
@@ -550,16 +557,26 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       view.ui.move('zoom', 'bottom-left')
       bringReviewLayersToFront()
       if (cnddbOutputLayer) {
-        void cnddbOutputLayer.when(() => {
-          bringReviewLayersToFront()
-          const targetExtent = bufferOutputLayer?.fullExtent ?? cnddbOutputLayer.fullExtent
-          if (targetExtent) {
-            void view.goTo(targetExtent.expand(1.2), { duration: 700 })
+        void (async () => {
+          try {
+            await applyArcGISTokenToLayer(cnddbOutputLayer)
+            await cnddbOutputLayer.load()
+            cnddbLayerView = await view.whenLayerView(cnddbOutputLayer)
+            bringReviewLayersToFront()
+            applySelectedSpecies(selectedSpeciesRef.current)
+
+            const extentResult = await cnddbOutputLayer.queryExtent()
+            const targetExtent = extentResult.extent ?? cnddbOutputLayer.fullExtent ?? bufferOutputLayer?.fullExtent
+            if (!selectedSpeciesRef.current && targetExtent) {
+              await view.goTo(targetExtent.expand(1.2), { duration: 450 })
+            }
+          } catch {
+            // Keep the map usable if the CNDDB service is slow or temporarily unavailable.
           }
-        })
+        })()
       }
       void loadProjectFeatureLayer(projectUrlRef.current)
-      void applySelectedSpecies(selectedSpeciesRef.current)
+      applySelectedSpecies(selectedSpeciesRef.current)
     })
 
     const interval = window.setInterval(() => {
