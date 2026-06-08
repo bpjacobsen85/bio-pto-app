@@ -767,7 +767,7 @@ function App() {
         setReviewEdits({})
         setReviewSaveStatus('idle')
         setReviewSaveMessage('')
-        setSelectedSpeciesId((current) => current ?? rows[0]?.objectId ?? null)
+        setSelectedSpeciesId(null)
         setStatsStatus('ready')
         setStatsMessage(`${rows.length} species loaded from the current summary table.`)
       } catch (error) {
@@ -810,7 +810,7 @@ function App() {
     )).length,
   })), [conservationFilters, reviewEdits, speciesResults, speciesTypeFilter])
 
-  const selectedSpecies = filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId) ?? filteredSpeciesResults[0]
+  const selectedSpecies = selectedSpeciesId === null ? undefined : filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId)
   const totalSpecies = filteredSpeciesResults.length
   const totalOccurrences = filteredSpeciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
   const plantCount = speciesResults.filter((row) => row.speciesType === 'Plants').length
@@ -921,7 +921,7 @@ function App() {
     setSpeciesTypeFilter('All')
     setRatingFilter(null)
     setConservationFilters([])
-    selectSpeciesForReview(speciesResults[0]?.objectId ?? null)
+    selectSpeciesForReview(null)
   }
 
   function handleSelectSpeciesFromMap(commonName: string) {
@@ -2011,7 +2011,7 @@ function App() {
                 {hasSpeciesFilters && (
                   <span>Showing {filteredSpeciesResults.length} of {speciesResults.length}</span>
                 )}
-                <button className="show-all-button" type="button" onClick={clearSpeciesFilters} disabled={!hasSpeciesFilters && selectedSpeciesId === speciesResults[0]?.objectId}>
+                <button className="show-all-button" type="button" onClick={clearSpeciesFilters} disabled={!hasSpeciesFilters && selectedSpeciesId === null}>
                   Show all
                 </button>
               </div>

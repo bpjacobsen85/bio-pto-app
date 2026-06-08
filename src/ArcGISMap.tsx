@@ -1,7 +1,6 @@
 ﻿import { useEffect, useRef } from 'react'
 import Map from '@arcgis/core/Map'
 import WebMap from '@arcgis/core/WebMap'
-import Graphic from '@arcgis/core/Graphic'
 import MapView from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
@@ -128,6 +127,28 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
+function cnddbDefaultRenderer() {
+  return {
+    type: 'simple' as const,
+    symbol: {
+      type: 'simple-fill' as const,
+      color: [255, 182, 203, 0.38],
+      outline: { color: [190, 82, 118, 0.95], width: 1.4 },
+    },
+  }
+}
+
+function cnddbSelectedRenderer() {
+  return {
+    type: 'simple' as const,
+    symbol: {
+      type: 'simple-fill' as const,
+      color: [222, 38, 38, 0.42],
+      outline: { color: [118, 16, 16, 1], width: 3 },
+    },
+  }
+}
+
 export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onRemoveProjectLayer, onRemoveBufferLayer, onRemoveCnddbLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
@@ -159,7 +180,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const projectLayer = new GraphicsLayer({ title: 'Project input', listMode: 'hide' })
     const resultLayer = new GraphicsLayer({ title: 'PTO results', listMode: 'hide' })
-    const selectedCnddbLayer = new GraphicsLayer({ title: 'Selected CNDDB species', listMode: 'hide', visible: false })
     const sketchLayer = new GraphicsLayer({ title: 'Project sketch input', listMode: 'hide' })
     const bufferOutputLayer = bufferLayerUrl?.trim()
       ? new FeatureLayer({
@@ -191,14 +211,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         outFields: ['*'],
         opacity: 0.72,
         popupEnabled: false,
-        renderer: {
-          type: 'simple',
-          symbol: {
-            type: 'simple-fill',
-            color: [255, 182, 203, 0.38],
-            outline: { color: [190, 82, 118, 0.95], width: 1.4 },
-          },
-        },
+        renderer: cnddbDefaultRenderer(),
         popupTemplate: {
           title: '{CNAME}',
           content: [
@@ -246,7 +259,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
-    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), selectedCnddbLayer, sketchLayer])
+    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
     void Promise.all([bufferOutputLayer, cnddbOutputLayer, ...userAddedFeatureLayers].map(applyArcGISTokenToLayer))
 
     const bringReviewLayersToFront = () => {
@@ -255,9 +268,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       }
       if (cnddbOutputLayer && map.layers.includes(cnddbOutputLayer)) {
         map.reorder(cnddbOutputLayer, map.layers.length - 1)
-      }
-      if (selectedCnddbLayer && map.layers.includes(selectedCnddbLayer)) {
-        map.reorder(selectedCnddbLayer, map.layers.length - 1)
       }
       if (sketchLayer && map.layers.includes(sketchLayer)) {
         map.reorder(sketchLayer, map.layers.length - 1)
@@ -410,74 +420,22 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     })
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
-    const syncSelectedCnddbLayerVisibility = () => {
-      selectedCnddbLayer.visible = Boolean(cnddbOutputLayer?.visible && selectedSpeciesRef.current)
-    }
-
-    const selectedSymbolForGeometry = (geometryType: string | undefined) => {
-      if (geometryType === 'point' || geometryType === 'multipoint') {
-        return new SimpleMarkerSymbol({
-          style: 'circle',
-          color: [222, 38, 38, 0.8],
-          size: 18,
-          outline: { color: [118, 16, 16, 1], width: 3 },
-        })
-      }
-      if (geometryType === 'polyline') {
-        return new SimpleLineSymbol({
-          color: [222, 38, 38, 1],
-          width: 5,
-        })
-      }
-      return new SimpleFillSymbol({
-        color: [222, 38, 38, 0.36],
-        outline: { color: [118, 16, 16, 1], width: 3 },
-      })
-    }
-
-    const updateSelectedSpeciesHighlight = async (commonName: string, requestId: number) => {
-      selectedCnddbLayer.removeAll()
-      syncSelectedCnddbLayerVisibility()
-      if (!cnddbOutputLayer || !commonName) return null
-
-      try {
-        await cnddbOutputLayer.load()
-        if (requestId !== selectedSpeciesRequestId) return null
-        const query = cnddbOutputLayer.createQuery()
-        query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
-        query.outFields = ['CNAME']
-        query.returnGeometry = true
-        query.num = 300
-        const features = await cnddbOutputLayer.queryFeatures(query)
-        if (requestId !== selectedSpeciesRequestId) return null
-        const symbol = selectedSymbolForGeometry(cnddbOutputLayer.geometryType)
-        selectedCnddbLayer.addMany(features.features.map((feature) => new Graphic({
-          geometry: feature.geometry,
-          attributes: feature.attributes,
-          symbol,
-        })))
-        syncSelectedCnddbLayerVisibility()
-        return features
-      } catch {
-        return null
-      }
-    }
-
     const applySelectedSpecies = async (commonName: string) => {
       loadedSpeciesName = commonName
       const requestId = ++selectedSpeciesRequestId
       if (!cnddbOutputLayer) return
 
-      cnddbOutputLayer.definitionExpression = '1=1'
-      cnddbOutputLayer.featureEffect = null
-      const selectedFeatures = await updateSelectedSpeciesHighlight(commonName, requestId)
-
-      if (!commonName || requestId !== selectedSpeciesRequestId) return
-
       try {
+        await cnddbOutputLayer.load()
+        if (requestId !== selectedSpeciesRequestId) return
+        const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
+        cnddbOutputLayer.definitionExpression = selectedWhere
+        cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
+        if (!commonName) return
+
         const query = cnddbOutputLayer.createQuery()
-        query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
-        const extentResult = selectedFeatures?.features.length ? await cnddbOutputLayer.queryExtent(query) : await cnddbOutputLayer.queryExtent()
+        query.where = selectedWhere
+        const extentResult = await cnddbOutputLayer.queryExtent(query)
         if (requestId === selectedSpeciesRequestId && extentResult.extent) {
           await view.goTo(extentResult.extent.expand(1.5), { duration: 650 })
         }
@@ -499,9 +457,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       } catch {
         // Map selection should never interrupt normal pan/zoom/popup interaction.
       }
-    })
-    const cnddbVisibilityHandle = cnddbOutputLayer?.watch('visible', () => {
-      syncSelectedCnddbLayerVisibility()
     })
 
     const loadProjectFeatureLayer = async (url: string) => {
@@ -611,7 +566,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       window.clearInterval(interval)
       layerOrderHandle.remove()
       mapClickHandle.remove()
-      cnddbVisibilityHandle?.remove()
       layerList.destroy()
       sketch.destroy()
       measurement.destroy()
