@@ -133,8 +133,8 @@ function cnddbDefaultRenderer() {
     type: 'simple' as const,
     symbol: {
       type: 'simple-fill' as const,
-      color: [255, 182, 203, 0.38],
-      outline: { color: [190, 82, 118, 0.95], width: 1.4 },
+      color: [255, 182, 203, 0.32],
+      outline: { color: [190, 82, 118, 0], width: 0 },
     },
   }
 }
@@ -212,32 +212,10 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         id: 'pto-cnddb-output',
         url: cnddbLayerUrl.trim(),
         title: 'CNDDB output results',
-        outFields: ['*'],
-        opacity: 0.72,
-        popupEnabled: true,
+        outFields: ['CNAME'],
+        opacity: 0.64,
+        popupEnabled: false,
         renderer: cnddbDefaultRenderer(),
-        popupTemplate: {
-          title: '{CNAME}',
-          content: [
-            {
-              type: 'fields',
-              fieldInfos: [
-                { fieldName: 'CNAME', label: 'Common name' },
-                { fieldName: 'SNAME', label: 'Scientific name' },
-                { fieldName: 'ELMCODE', label: 'Element code' },
-                { fieldName: 'PTO_Review', label: 'PTO review' },
-                { fieldName: 'reviewed_potential', label: 'Reviewed potential' },
-                { fieldName: 'Distance', label: 'Distance' },
-                { fieldName: 'MIN_buff', label: 'Nearest distance (mi)' },
-                { fieldName: 'ACCURACY', label: 'Accuracy' },
-                { fieldName: 'OCCNUMBER', label: 'Occurrence number' },
-                { fieldName: 'EOINDEX', label: 'EO index' },
-                { fieldName: 'LASTOBS', label: 'Last observed' },
-                { fieldName: 'PRESENCE', label: 'Presence' },
-              ],
-            },
-          ],
-        },
       })
       : null
     const userAddedFeatureLayers = mapAddedLayers.map((layer) => new FeatureLayer({
@@ -453,10 +431,16 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       if (!view.stationary || mapClickSelectionInFlight || cnddbLayerView?.updating) return
       mapClickSelectionInFlight = true
       try {
-        const response = await view.hitTest(event, { include: cnddbOutputLayer })
-        const result = response.results.find((candidate) => candidate.type === 'graphic' && 'graphic' in candidate)
-        const graphic = result?.type === 'graphic' ? result.graphic : null
-        const commonName = String(graphic?.attributes?.CNAME ?? '').trim()
+        const query = cnddbOutputLayer.createQuery()
+        const activeSpeciesName = selectedSpeciesRef.current
+        query.geometry = event.mapPoint
+        query.spatialRelationship = 'intersects'
+        query.where = activeSpeciesName ? `CNAME = '${escapeSqlLiteral(activeSpeciesName)}'` : '1=1'
+        query.outFields = ['CNAME']
+        query.returnGeometry = false
+        query.num = 1
+        const response = await cnddbOutputLayer.queryFeatures(query)
+        const commonName = String(response.features[0]?.attributes?.CNAME ?? '').trim()
         if (commonName && commonName !== selectedSpeciesRef.current) {
           onSelectSpeciesFromMapRef.current?.(commonName)
         }
