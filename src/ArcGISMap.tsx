@@ -12,6 +12,7 @@ import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import '@arcgis/core/assets/esri/themes/light/main.css'
+import { getArcGISToken } from './arcgisAuth'
 import './ArcGISMap.css'
 
 export type ProjectInputFeatureSet = {
@@ -265,10 +266,22 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       customParameters: { bioPtoLayerId: layer.id },
     }))
 
+    const applyArcGISTokenToLayer = async (layer: FeatureLayer | null) => {
+      if (!layer) return
+      try {
+        const token = await getArcGISToken()
+        layer.customParameters = { ...(layer.customParameters ?? {}), token }
+        layer.refresh()
+      } catch {
+        // Public services do not need a token, and signed-out setup should keep working.
+      }
+    }
+
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
     map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), selectedCnddbLayer, sketchLayer])
+    void Promise.all([bufferOutputLayer, cnddbOutputLayer, ...userAddedFeatureLayers].map(applyArcGISTokenToLayer))
 
     const bringReviewLayersToFront = () => {
       if (bufferOutputLayer && map.layers.includes(bufferOutputLayer)) {
@@ -546,6 +559,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
       projectFeatureLayer = layer
       map.add(layer, 2)
+      await applyArcGISTokenToLayer(layer)
 
       try {
         await layer.load()
