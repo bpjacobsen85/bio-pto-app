@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import './App.css'
-import { getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
+import { credentialReadyEventName, getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
 import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from './arcgisGp'
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 
@@ -643,19 +643,25 @@ function App() {
     let alive = true
     clearSavedAnalysisRun()
 
-    restoreArcGISSession()
+    const refreshSession = () => {
+      restoreArcGISSession()
       .then((restoredUser) => {
         if (!alive) return
-        setUser(restoredUser)
+        if (restoredUser) setUser(restoredUser)
         setAuthStatus('idle')
       })
       .catch(() => {
         if (!alive) return
         setAuthStatus('idle')
       })
+    }
+
+    refreshSession()
+    window.addEventListener(credentialReadyEventName, refreshSession)
 
     return () => {
       alive = false
+      window.removeEventListener(credentialReadyEventName, refreshSession)
     }
   }, [])
 
