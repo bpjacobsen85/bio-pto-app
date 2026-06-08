@@ -304,7 +304,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     let cnddbLayerView: FeatureLayerView | null = null
     let loadedProjectUrl = ''
     let selectedSpeciesRequestId = 0
-    let selectedSpeciesZoomTimeout: number | null = null
+    let mapClickSelectionInFlight = false
 
     const notifyInputChange = () => {
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
@@ -429,47 +429,29 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       const requestId = ++selectedSpeciesRequestId
       if (!cnddbOutputLayer) return
 
-      if (selectedSpeciesZoomTimeout !== null) {
-        window.clearTimeout(selectedSpeciesZoomTimeout)
-        selectedSpeciesZoomTimeout = null
-      }
-
       const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
       cnddbOutputLayer.definitionExpression = '1=1'
       cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
       if (cnddbLayerView) {
         cnddbLayerView.filter = commonName ? { where: selectedWhere } : null
+        return
       }
-      if (!commonName) return
 
-      selectedSpeciesZoomTimeout = window.setTimeout(() => {
-        void (async () => {
-          try {
-            await cnddbOutputLayer.load()
-            cnddbLayerView ??= await view.whenLayerView(cnddbOutputLayer)
-            cnddbLayerView.filter = { where: selectedWhere }
-            if (requestId !== selectedSpeciesRequestId) return
-
-            const query = cnddbOutputLayer.createQuery()
-            query.where = selectedWhere
-            const extentResult = await cnddbOutputLayer.queryExtent(query)
-            if (requestId === selectedSpeciesRequestId && extentResult.extent) {
-              await view.goTo(extentResult.extent.expand(1.35), { duration: 250 })
-            }
-          } catch {
-            // Some output layers may not expose matching CNAME values; keep the table selection working either way.
-          } finally {
-            if (requestId === selectedSpeciesRequestId) {
-              selectedSpeciesZoomTimeout = null
-            }
-          }
-        })()
-      }, 60)
+      void view.whenLayerView(cnddbOutputLayer).then((layerView) => {
+        cnddbLayerView = layerView
+        if (requestId === selectedSpeciesRequestId) {
+          cnddbLayerView.filter = commonName ? { where: selectedWhere } : null
+        }
+      }).catch(() => {
+        // Keep table selection working if the CNDDB layer view is not available yet.
+      })
     }
     applySelectedSpeciesRef.current = applySelectedSpecies
 
     const mapClickHandle = view.on('click', async (event) => {
       if (!cnddbOutputLayer || !reviewMode) return
+      if (!view.stationary || mapClickSelectionInFlight || cnddbLayerView?.updating) return
+      mapClickSelectionInFlight = true
       try {
         const response = await view.hitTest(event, { include: cnddbOutputLayer })
         const result = response.results.find((candidate) => candidate.type === 'graphic' && 'graphic' in candidate)
@@ -480,6 +462,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         }
       } catch {
         // Map selection should never interrupt normal pan/zoom/popup interaction.
+      } finally {
+        mapClickSelectionInFlight = false
       }
     })
 
@@ -560,16 +544,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         void (async () => {
           try {
             await applyArcGISTokenToLayer(cnddbOutputLayer)
-            await cnddbOutputLayer.load()
             cnddbLayerView = await view.whenLayerView(cnddbOutputLayer)
             bringReviewLayersToFront()
             applySelectedSpecies(selectedSpeciesRef.current)
-
-            const extentResult = await cnddbOutputLayer.queryExtent()
-            const targetExtent = extentResult.extent ?? cnddbOutputLayer.fullExtent ?? bufferOutputLayer?.fullExtent
-            if (!selectedSpeciesRef.current && targetExtent) {
-              await view.goTo(targetExtent.expand(1.2), { duration: 450 })
-            }
           } catch {
             // Keep the map usable if the CNDDB service is slow or temporarily unavailable.
           }
@@ -593,9 +570,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     return () => {
       window.clearInterval(interval)
-      if (selectedSpeciesZoomTimeout !== null) {
-        window.clearTimeout(selectedSpeciesZoomTimeout)
-      }
       applySelectedSpeciesRef.current = null
       layerOrderHandle.remove()
       mapClickHandle.remove()
