@@ -128,47 +128,6 @@ function emptySummary(): ProjectSketchSummary {
   }
 }
 
-function ptoPotentialRenderer(valueExpression?: string) {
-  return {
-    type: 'unique-value' as const,
-    ...(valueExpression
-      ? { valueExpression, valueExpressionTitle: 'PTO potential' }
-      : { field: 'PTO_Review' }),
-    defaultSymbol: {
-      type: 'simple-fill' as const,
-      color: [126, 144, 162, 0.42],
-      outline: { color: [66, 79, 92, 1], width: 1.6 },
-    },
-    uniqueValueInfos: [
-      {
-        value: 'High',
-        label: 'High',
-        symbol: { type: 'simple-fill' as const, color: [218, 67, 67, 0.56], outline: { color: [137, 24, 24, 1], width: 2 } },
-      },
-      {
-        value: 'Moderate',
-        label: 'Moderate',
-        symbol: { type: 'simple-fill' as const, color: [241, 156, 55, 0.52], outline: { color: [154, 84, 15, 1], width: 1.8 } },
-      },
-      {
-        value: 'Low',
-        label: 'Low',
-        symbol: { type: 'simple-fill' as const, color: [62, 157, 122, 0.5], outline: { color: [22, 100, 70, 1], width: 1.8 } },
-      },
-      {
-        value: 'No Potential',
-        label: 'No Potential',
-        symbol: { type: 'simple-fill' as const, color: [111, 125, 139, 0.26], outline: { color: [76, 88, 100, 0.95], width: 1.4 } },
-      },
-      {
-        value: 'Needs Review',
-        label: 'Needs Review',
-        symbol: { type: 'simple-fill' as const, color: [116, 86, 176, 0.48], outline: { color: [74, 43, 129, 1], width: 1.8 } },
-      },
-    ],
-  }
-}
-
 export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onRemoveProjectLayer, onRemoveBufferLayer, onRemoveCnddbLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
@@ -231,7 +190,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         title: 'CNDDB output results',
         outFields: ['*'],
         opacity: 0.72,
-        popupEnabled: true,
+        popupEnabled: false,
         renderer: {
           type: 'simple',
           symbol: {
@@ -488,7 +447,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
         query.outFields = ['CNAME']
         query.returnGeometry = true
-        query.num = 2000
+        query.num = 300
         const features = await cnddbOutputLayer.queryFeatures(query)
         if (requestId !== selectedSpeciesRequestId) return null
         const symbol = selectedSymbolForGeometry(cnddbOutputLayer.geometryType)
@@ -534,7 +493,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         const result = response.results.find((candidate) => candidate.type === 'graphic' && 'graphic' in candidate)
         const graphic = result?.type === 'graphic' ? result.graphic : null
         const commonName = String(graphic?.attributes?.CNAME ?? '').trim()
-        if (commonName) onSelectSpeciesFromMapRef.current?.(commonName)
+        if (commonName && commonName !== selectedSpeciesRef.current) {
+          onSelectSpeciesFromMapRef.current?.(commonName)
+        }
       } catch {
         // Map selection should never interrupt normal pan/zoom/popup interaction.
       }
@@ -619,16 +580,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       if (cnddbOutputLayer) {
         void cnddbOutputLayer.when(() => {
           bringReviewLayersToFront()
-          const fieldNames = new Set(cnddbOutputLayer.fields.map((field) => field.name.toLowerCase()))
-          const ptoReviewField = cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'pto_review')?.name
-          const reviewedPotentialField = fieldNames.has('reviewed_potential') ? cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'reviewed_potential')?.name : ''
-          if (reviewedPotentialField) {
-            cnddbOutputLayer.renderer = ptoPotentialRenderer(ptoReviewField
-              ? `IIf(!IsEmpty($feature.${reviewedPotentialField}), $feature.${reviewedPotentialField}, $feature.${ptoReviewField})`
-              : `$feature.${reviewedPotentialField}`)
-          } else if (ptoReviewField) {
-            cnddbOutputLayer.renderer = ptoPotentialRenderer()
-          }
           const targetExtent = bufferOutputLayer?.fullExtent ?? cnddbOutputLayer.fullExtent
           if (targetExtent) {
             void view.goTo(targetExtent.expand(1.2), { duration: 700 })
