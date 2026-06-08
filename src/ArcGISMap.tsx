@@ -158,13 +158,16 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
   const activeMapToolRef = useRef(activeMapTool)
   const onSelectSpeciesFromMapRef = useRef(onSelectSpeciesFromMap)
+  const applySelectedSpeciesRef = useRef<((commonName: string) => void) | null>(null)
 
   useEffect(() => {
     projectUrlRef.current = projectLayerUrl?.trim() ?? ''
   }, [projectLayerUrl])
 
   useEffect(() => {
-    selectedSpeciesRef.current = selectedSpeciesName?.trim() ?? ''
+    const nextSpeciesName = selectedSpeciesName?.trim() ?? ''
+    selectedSpeciesRef.current = nextSpeciesName
+    applySelectedSpeciesRef.current?.(nextSpeciesName)
   }, [selectedSpeciesName])
 
   useEffect(() => {
@@ -298,8 +301,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     let featureLayerSummary: ProjectSketchSummary | null = null
     let projectFeatureLayer: FeatureLayer | null = null
     let loadedProjectUrl = ''
-    let loadedSpeciesName = ''
     let selectedSpeciesRequestId = 0
+    let selectedSpeciesZoomTimeout: number | null = null
 
     const notifyInputChange = () => {
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
@@ -420,29 +423,43 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     })
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
-    const applySelectedSpecies = async (commonName: string) => {
-      loadedSpeciesName = commonName
+    const applySelectedSpecies = (commonName: string) => {
       const requestId = ++selectedSpeciesRequestId
       if (!cnddbOutputLayer) return
 
-      try {
-        await cnddbOutputLayer.load()
-        if (requestId !== selectedSpeciesRequestId) return
-        const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
-        cnddbOutputLayer.definitionExpression = selectedWhere
-        cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
-        if (!commonName) return
-
-        const query = cnddbOutputLayer.createQuery()
-        query.where = selectedWhere
-        const extentResult = await cnddbOutputLayer.queryExtent(query)
-        if (requestId === selectedSpeciesRequestId && extentResult.extent) {
-          await view.goTo(extentResult.extent.expand(1.5), { duration: 650 })
-        }
-      } catch {
-        // Some output layers may not expose matching CNAME values; keep the table selection working either way.
+      if (selectedSpeciesZoomTimeout !== null) {
+        window.clearTimeout(selectedSpeciesZoomTimeout)
+        selectedSpeciesZoomTimeout = null
       }
+
+      const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
+      cnddbOutputLayer.definitionExpression = selectedWhere
+      cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
+      if (!commonName) return
+
+      selectedSpeciesZoomTimeout = window.setTimeout(() => {
+        void (async () => {
+          try {
+            await cnddbOutputLayer.load()
+            if (requestId !== selectedSpeciesRequestId) return
+
+            const query = cnddbOutputLayer.createQuery()
+            query.where = selectedWhere
+            const extentResult = await cnddbOutputLayer.queryExtent(query)
+            if (requestId === selectedSpeciesRequestId && extentResult.extent) {
+              await view.goTo(extentResult.extent.expand(1.35), { duration: 250 })
+            }
+          } catch {
+            // Some output layers may not expose matching CNAME values; keep the table selection working either way.
+          } finally {
+            if (requestId === selectedSpeciesRequestId) {
+              selectedSpeciesZoomTimeout = null
+            }
+          }
+        })()
+      }, 60)
     }
+    applySelectedSpeciesRef.current = applySelectedSpecies
 
     const mapClickHandle = view.on('click', async (event) => {
       if (!cnddbOutputLayer || !reviewMode) return
@@ -551,11 +568,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         void loadProjectFeatureLayer(nextUrl)
       }
 
-      const nextSpeciesName = selectedSpeciesRef.current
-      if (loadedSpeciesName !== nextSpeciesName) {
-        void applySelectedSpecies(nextSpeciesName)
-      }
-
       const desiredMeasurementTool = activeMapToolRef.current === 'measure' ? 'distance' : null
       if (measurement.activeTool !== desiredMeasurementTool) {
         measurement.activeTool = desiredMeasurementTool
@@ -564,6 +576,10 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     return () => {
       window.clearInterval(interval)
+      if (selectedSpeciesZoomTimeout !== null) {
+        window.clearTimeout(selectedSpeciesZoomTimeout)
+      }
+      applySelectedSpeciesRef.current = null
       layerOrderHandle.remove()
       mapClickHandle.remove()
       layerList.destroy()
