@@ -232,7 +232,14 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         outFields: ['*'],
         opacity: 0.72,
         popupEnabled: true,
-        renderer: ptoPotentialRenderer(),
+        renderer: {
+          type: 'simple',
+          symbol: {
+            type: 'simple-fill',
+            color: [72, 128, 184, 0.45],
+            outline: { color: [38, 82, 126, 1], width: 1.5 },
+          },
+        },
         popupTemplate: {
           title: '{CNAME}',
           content: [
@@ -608,9 +615,14 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         void cnddbOutputLayer.when(() => {
           bringReviewLayersToFront()
           const fieldNames = new Set(cnddbOutputLayer.fields.map((field) => field.name.toLowerCase()))
+          const ptoReviewField = cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'pto_review')?.name
           const reviewedPotentialField = fieldNames.has('reviewed_potential') ? cnddbOutputLayer.fields.find((field) => field.name.toLowerCase() === 'reviewed_potential')?.name : ''
           if (reviewedPotentialField) {
-            cnddbOutputLayer.renderer = ptoPotentialRenderer(`IIf(!IsEmpty($feature.${reviewedPotentialField}), $feature.${reviewedPotentialField}, $feature.PTO_Review)`)
+            cnddbOutputLayer.renderer = ptoPotentialRenderer(ptoReviewField
+              ? `IIf(!IsEmpty($feature.${reviewedPotentialField}), $feature.${reviewedPotentialField}, $feature.${ptoReviewField})`
+              : `$feature.${reviewedPotentialField}`)
+          } else if (ptoReviewField) {
+            cnddbOutputLayer.renderer = ptoPotentialRenderer()
           }
           const targetExtent = bufferOutputLayer?.fullExtent ?? cnddbOutputLayer.fullExtent
           if (targetExtent) {
