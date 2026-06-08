@@ -236,8 +236,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
           type: 'simple',
           symbol: {
             type: 'simple-fill',
-            color: [72, 128, 184, 0.45],
-            outline: { color: [38, 82, 126, 1], width: 1.5 },
+            color: [0, 178, 219, 0.5],
+            outline: { color: [0, 66, 92, 1], width: 2 },
           },
         },
         popupTemplate: {
@@ -330,6 +330,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     let projectFeatureLayer: FeatureLayer | null = null
     let loadedProjectUrl = ''
     let loadedSpeciesName = ''
+    let selectedSpeciesRequestId = 0
 
     const notifyInputChange = () => {
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
@@ -454,45 +455,68 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       selectedCnddbLayer.visible = Boolean(cnddbOutputLayer?.visible && selectedSpeciesRef.current)
     }
 
-    const selectedSymbolForGeometry = (geometryType: string | undefined) => {
+    const selectedSymbolsForGeometry = (geometryType: string | undefined) => {
       if (geometryType === 'point' || geometryType === 'multipoint') {
-        return new SimpleMarkerSymbol({
-          style: 'circle',
-          color: [255, 231, 82, 0.35],
-          size: 20,
-          outline: { color: [20, 20, 20, 1], width: 4 },
-        })
+        return [
+          new SimpleMarkerSymbol({
+            style: 'circle',
+            color: [20, 20, 20, 0.28],
+            size: 26,
+            outline: { color: [20, 20, 20, 1], width: 5 },
+          }),
+          new SimpleMarkerSymbol({
+            style: 'circle',
+            color: [255, 236, 69, 0.72],
+            size: 18,
+            outline: { color: [255, 255, 255, 1], width: 2 },
+          }),
+        ]
       }
       if (geometryType === 'polyline') {
-        return new SimpleLineSymbol({
-          color: [255, 231, 82, 1],
-          width: 6,
-        })
+        return [
+          new SimpleLineSymbol({
+            color: [20, 20, 20, 1],
+            width: 9,
+          }),
+          new SimpleLineSymbol({
+            color: [255, 236, 69, 1],
+            width: 5,
+          }),
+        ]
       }
-      return new SimpleFillSymbol({
-        color: [255, 231, 82, 0.14],
-        outline: { color: [20, 20, 20, 1], width: 5 },
-      })
+      return [
+        new SimpleFillSymbol({
+          color: [20, 20, 20, 0.08],
+          outline: { color: [20, 20, 20, 1], width: 7 },
+        }),
+        new SimpleFillSymbol({
+          color: [255, 236, 69, 0.28],
+          outline: { color: [255, 255, 255, 1], width: 2 },
+        }),
+      ]
     }
 
-    const updateSelectedSpeciesHighlight = async (commonName: string) => {
+    const updateSelectedSpeciesHighlight = async (commonName: string, requestId: number) => {
       selectedCnddbLayer.removeAll()
       syncSelectedCnddbLayerVisibility()
       if (!cnddbOutputLayer || !commonName) return null
 
       try {
+        await cnddbOutputLayer.load()
+        if (requestId !== selectedSpeciesRequestId) return null
         const query = cnddbOutputLayer.createQuery()
         query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
         query.outFields = ['CNAME']
         query.returnGeometry = true
-        query.num = 500
+        query.num = 2000
         const features = await cnddbOutputLayer.queryFeatures(query)
-        const symbol = selectedSymbolForGeometry(cnddbOutputLayer.geometryType)
-        selectedCnddbLayer.addMany(features.features.map((feature) => new Graphic({
+        if (requestId !== selectedSpeciesRequestId) return null
+        const symbols = selectedSymbolsForGeometry(cnddbOutputLayer.geometryType)
+        selectedCnddbLayer.addMany(symbols.flatMap((symbol) => features.features.map((feature) => new Graphic({
           geometry: feature.geometry,
           attributes: feature.attributes,
           symbol,
-        })))
+        }))))
         syncSelectedCnddbLayerVisibility()
         return features
       } catch {
@@ -502,19 +526,20 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const applySelectedSpecies = async (commonName: string) => {
       loadedSpeciesName = commonName
+      const requestId = ++selectedSpeciesRequestId
       if (!cnddbOutputLayer) return
 
       cnddbOutputLayer.definitionExpression = '1=1'
       cnddbOutputLayer.featureEffect = null
-      const selectedFeatures = await updateSelectedSpeciesHighlight(commonName)
+      const selectedFeatures = await updateSelectedSpeciesHighlight(commonName, requestId)
 
-      if (!commonName) return
+      if (!commonName || requestId !== selectedSpeciesRequestId) return
 
       try {
         const query = cnddbOutputLayer.createQuery()
         query.where = `CNAME = '${escapeSqlLiteral(commonName)}'`
         const extentResult = selectedFeatures?.features.length ? await cnddbOutputLayer.queryExtent(query) : await cnddbOutputLayer.queryExtent()
-        if (extentResult.extent) {
+        if (requestId === selectedSpeciesRequestId && extentResult.extent) {
           await view.goTo(extentResult.extent.expand(1.5), { duration: 650 })
         }
       } catch {
