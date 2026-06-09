@@ -150,7 +150,7 @@ function cnddbSelectedRenderer() {
   }
 }
 
-export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onRemoveProjectLayer, onRemoveBufferLayer, onRemoveCnddbLayer, onSelectSpeciesFromMap }: ArcGISMapProps) {
+export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, bufferLayerUrl, cnddbLayerUrl, mapAddedLayers = [], selectedSpeciesName, reviewMode = false, onProjectSketchChange, onRemoveMapLayer, onRemoveProjectLayer, onRemoveBufferLayer, onRemoveCnddbLayer }: ArcGISMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerListRef = useRef<HTMLDivElement | null>(null)
   const measureRef = useRef<HTMLDivElement | null>(null)
@@ -158,7 +158,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   const projectUrlRef = useRef(projectLayerUrl?.trim() ?? '')
   const selectedSpeciesRef = useRef(selectedSpeciesName?.trim() ?? '')
   const activeMapToolRef = useRef(activeMapTool)
-  const onSelectSpeciesFromMapRef = useRef(onSelectSpeciesFromMap)
   const applySelectedSpeciesRef = useRef<((commonName: string) => void) | null>(null)
 
   useEffect(() => {
@@ -174,10 +173,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
   useEffect(() => {
     activeMapToolRef.current = activeMapTool
   }, [activeMapTool])
-
-  useEffect(() => {
-    onSelectSpeciesFromMapRef.current = onSelectSpeciesFromMap
-  }, [onSelectSpeciesFromMap])
 
   useEffect(() => {
     if (!containerRef.current || !layerListRef.current || !measureRef.current || !sketchRef.current) return
@@ -282,7 +277,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     let cnddbLayerView: FeatureLayerView | null = null
     let loadedProjectUrl = ''
     let selectedSpeciesRequestId = 0
-    let mapClickSelectionInFlight = false
     let zoomedToCnddbOutput = false
 
     const notifyInputChange = () => {
@@ -431,31 +425,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     }
     applySelectedSpeciesRef.current = applySelectedSpecies
 
-    const mapClickHandle = view.on('click', async (event) => {
-      if (!cnddbOutputLayer || !reviewMode) return
-      if (!view.stationary || mapClickSelectionInFlight || cnddbLayerView?.updating) return
-      mapClickSelectionInFlight = true
-      try {
-        const query = cnddbOutputLayer.createQuery()
-        const activeSpeciesName = selectedSpeciesRef.current
-        query.geometry = event.mapPoint
-        query.spatialRelationship = 'intersects'
-        query.where = activeSpeciesName ? `CNAME = '${escapeSqlLiteral(activeSpeciesName)}'` : '1=1'
-        query.outFields = ['CNAME']
-        query.returnGeometry = false
-        query.num = 1
-        const response = await cnddbOutputLayer.queryFeatures(query)
-        const commonName = String(response.features[0]?.attributes?.CNAME ?? '').trim()
-        if (commonName && commonName !== selectedSpeciesRef.current) {
-          onSelectSpeciesFromMapRef.current?.(commonName)
-        }
-      } catch {
-        // Map selection should never interrupt normal pan/zoom/popup interaction.
-      } finally {
-        mapClickSelectionInFlight = false
-      }
-    })
-
     const loadProjectFeatureLayer = async (url: string) => {
       loadedProjectUrl = url
 
@@ -567,7 +536,6 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       window.clearInterval(interval)
       applySelectedSpeciesRef.current = null
       layerOrderHandle.remove()
-      mapClickHandle.remove()
       layerList.destroy()
       sketch.destroy()
       measurement.destroy()
