@@ -133,8 +133,8 @@ function cnddbDefaultRenderer() {
     type: 'simple' as const,
     symbol: {
       type: 'simple-fill' as const,
-      color: [255, 182, 203, 0.32],
-      outline: { color: [190, 82, 118, 0], width: 0 },
+      color: [255, 60, 160, 0.5],
+      outline: { color: [145, 0, 92, 0.95], width: 1.4 },
     },
   }
 }
@@ -144,8 +144,8 @@ function cnddbSelectedRenderer() {
     type: 'simple' as const,
     symbol: {
       type: 'simple-fill' as const,
-      color: [222, 38, 38, 0.42],
-      outline: { color: [118, 16, 16, 1], width: 3 },
+      color: [235, 32, 32, 0.62],
+      outline: { color: [105, 0, 0, 1], width: 3.5 },
     },
   }
 }
@@ -213,7 +213,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         url: cnddbLayerUrl.trim(),
         title: 'CNDDB output results',
         outFields: ['CNAME'],
-        opacity: 0.64,
+        opacity: 0.88,
         popupEnabled: false,
         renderer: cnddbDefaultRenderer(),
       })
