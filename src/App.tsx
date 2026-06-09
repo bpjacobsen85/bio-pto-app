@@ -816,7 +816,7 @@ function App() {
     )).length,
   })), [conservationFilters, reviewEdits, speciesResults, speciesTypeFilter])
 
-  const selectedSpecies = selectedSpeciesId === null ? undefined : filteredSpeciesResults.find((row) => row.objectId === selectedSpeciesId)
+  const selectedSpecies = selectedSpeciesId === null ? undefined : speciesResults.find((row) => row.objectId === selectedSpeciesId)
   const totalSpecies = filteredSpeciesResults.length
   const totalOccurrences = filteredSpeciesResults.reduce((sum, row) => sum + (row.frequency ?? 0), 0)
   const plantCount = speciesResults.filter((row) => row.speciesType === 'Plants').length
@@ -2104,8 +2104,8 @@ function App() {
             <div className="detail-heading">
               {selectedSpecies ? <RatingPill rating={selectedPotential} /> : <RatingPill rating="Needs Review" />}
               <ReviewStatusPill status={selectedReviewStatus} />
-              <h2>{selectedSpecies?.common ?? 'No species loaded'}</h2>
-              <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : statsMessage}</p>
+              <h2>{selectedSpecies?.common ?? (speciesResults.length ? 'Select a species' : 'No species loaded')}</h2>
+              <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : speciesResults.length ? `${speciesResults.length} species loaded. Click a row to review model evidence.` : statsMessage}</p>
             </div>
             <div className="reason-card">
               <div>

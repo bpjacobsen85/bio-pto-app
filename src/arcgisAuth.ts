@@ -102,7 +102,6 @@ export async function getArcGISToken(): Promise<string> {
   if (!credential?.token) {
     throw new Error('ArcGIS sign-in did not return a usable token.')
   }
-  notifyCredentialReady()
   return credential.token
 }
 

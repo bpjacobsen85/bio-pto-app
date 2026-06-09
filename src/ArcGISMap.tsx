@@ -283,6 +283,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     let loadedProjectUrl = ''
     let selectedSpeciesRequestId = 0
     let mapClickSelectionInFlight = false
+    let zoomedToCnddbOutput = false
 
     const notifyInputChange = () => {
       onProjectSketchChange?.(summarizeSketch(sketchLayer) ?? featureLayerSummary ?? emptySummary())
@@ -369,18 +370,22 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       },
     })
 
+    const zoomToFeatureLayer = async (layer: FeatureLayer, expand = 1.2) => {
+      await layer.load()
+      const extentResult = await layer.queryExtent()
+      const targetExtent = extentResult.extent ?? layer.fullExtent
+      if (targetExtent) {
+        await view.goTo(targetExtent.expand(expand), { duration: 650 })
+      }
+    }
+
     layerList.on('trigger-action', async (event) => {
       const actionId = String(event.action.id)
       if (actionId.startsWith('zoom-')) {
         const layer = event.item.layer as FeatureLayer | undefined
         if (!layer) return
         try {
-          await layer.load()
-          const extentResult = await layer.queryExtent()
-          const targetExtent = extentResult.extent ?? layer.fullExtent
-          if (targetExtent) {
-            await view.goTo(targetExtent.expand(1.2), { duration: 650 })
-          }
+          await zoomToFeatureLayer(layer)
         } catch {
           // Keep the layer available even if a service does not allow extent queries.
         }
@@ -497,9 +502,11 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
         notifyInputChange()
 
-        const extentResult = await layer.queryExtent()
-        if (extentResult.extent) {
-          await view.goTo(extentResult.extent.expand(1.35), { duration: 700 })
+        if (!reviewMode || !cnddbOutputLayer) {
+          const extentResult = await layer.queryExtent()
+          if (extentResult.extent) {
+            await view.goTo(extentResult.extent.expand(1.35), { duration: 700 })
+          }
         }
       } catch (error) {
         featureLayerSummary = {
@@ -530,6 +537,10 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
             await applyArcGISTokenToLayer(cnddbOutputLayer)
             cnddbLayerView = await view.whenLayerView(cnddbOutputLayer)
             bringReviewLayersToFront()
+            if (!zoomedToCnddbOutput) {
+              zoomedToCnddbOutput = true
+              await zoomToFeatureLayer(cnddbOutputLayer)
+            }
             applySelectedSpecies(selectedSpeciesRef.current)
           } catch {
             // Keep the map usable if the CNDDB service is slow or temporarily unavailable.
