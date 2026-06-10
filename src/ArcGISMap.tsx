@@ -207,10 +207,28 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         id: 'pto-cnddb-output',
         url: cnddbLayerUrl.trim(),
         title: 'CNDDB output results',
-        outFields: ['CNAME'],
+        outFields: ['*'],
         opacity: 0.88,
-        popupEnabled: false,
+        popupEnabled: true,
         renderer: cnddbDefaultRenderer(),
+        popupTemplate: {
+          title: '{CNAME}',
+          content: [
+            {
+              type: 'fields',
+              fieldInfos: [
+                { fieldName: 'CNAME', label: 'Common name' },
+                { fieldName: 'SNAME', label: 'Scientific name' },
+                { fieldName: 'ELMCODE', label: 'Element code' },
+                { fieldName: 'OCCNUMBER', label: 'Occurrence number' },
+                { fieldName: 'EOINDEX', label: 'EO index' },
+                { fieldName: 'ACCURACY', label: 'Accuracy' },
+                { fieldName: 'PRESENCE', label: 'Presence' },
+                { fieldName: 'LASTOBS', label: 'Last observed' },
+              ],
+            },
+          ],
+        },
       })
       : null
     const userAddedFeatureLayers = mapAddedLayers.map((layer) => new FeatureLayer({

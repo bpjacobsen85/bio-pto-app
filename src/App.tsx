@@ -901,7 +901,7 @@ function App() {
   }
 
   function selectSpeciesForReview(objectId: number | null) {
-    setSelectedSpeciesId(objectId)
+    setSelectedSpeciesId((current) => current === objectId ? null : objectId)
     setReviewSaveStatus('idle')
     setReviewSaveMessage('')
   }
