@@ -2,7 +2,6 @@
 import Map from '@arcgis/core/Map'
 import WebMap from '@arcgis/core/WebMap'
 import MapView from '@arcgis/core/views/MapView'
-import type FeatureLayerView from '@arcgis/core/views/layers/FeatureLayerView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Sketch from '@arcgis/core/widgets/Sketch'
@@ -213,6 +212,20 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         renderer: cnddbDefaultRenderer(),
       })
       : null
+    const selectedCnddbOutputLayer = cnddbLayerUrl?.trim()
+      ? new FeatureLayer({
+        id: 'pto-cnddb-selected-output',
+        url: cnddbLayerUrl.trim(),
+        title: 'Selected CNDDB species',
+        outFields: ['CNAME'],
+        opacity: 0.95,
+        popupEnabled: false,
+        visible: false,
+        listMode: 'hide',
+        definitionExpression: '1=0',
+        renderer: cnddbSelectedRenderer(),
+      })
+      : null
     const userAddedFeatureLayers = mapAddedLayers.map((layer) => new FeatureLayer({
       id: `map-added-${layer.id}`,
       url: layer.url,
@@ -236,8 +249,8 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
     const map = webMapId?.trim()
       ? new WebMap({ portalItem: { id: webMapId.trim() } })
       : new Map({ basemap: 'topo-vector' })
-    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
-    void Promise.all([bufferOutputLayer, cnddbOutputLayer, ...userAddedFeatureLayers].map(applyArcGISTokenToLayer))
+    map.addMany([projectLayer, resultLayer, ...userAddedFeatureLayers, ...[bufferOutputLayer, cnddbOutputLayer, selectedCnddbOutputLayer].filter((layer): layer is FeatureLayer => Boolean(layer)), sketchLayer])
+    void Promise.all([bufferOutputLayer, cnddbOutputLayer, selectedCnddbOutputLayer, ...userAddedFeatureLayers].map(applyArcGISTokenToLayer))
 
     const bringReviewLayersToFront = () => {
       if (bufferOutputLayer && map.layers.includes(bufferOutputLayer)) {
@@ -245,6 +258,9 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       }
       if (cnddbOutputLayer && map.layers.includes(cnddbOutputLayer)) {
         map.reorder(cnddbOutputLayer, map.layers.length - 1)
+      }
+      if (selectedCnddbOutputLayer && map.layers.includes(selectedCnddbOutputLayer)) {
+        map.reorder(selectedCnddbOutputLayer, map.layers.length - 1)
       }
       if (sketchLayer && map.layers.includes(sketchLayer)) {
         map.reorder(sketchLayer, map.layers.length - 1)
@@ -274,9 +290,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     let featureLayerSummary: ProjectSketchSummary | null = null
     let projectFeatureLayer: FeatureLayer | null = null
-    let cnddbLayerView: FeatureLayerView | null = null
     let loadedProjectUrl = ''
-    let selectedSpeciesRequestId = 0
     let zoomedToCnddbOutput = false
 
     const notifyInputChange = () => {
@@ -403,25 +417,23 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
 
     const escapeSqlLiteral = (value: string) => value.replaceAll("'", "''")
     const applySelectedSpecies = (commonName: string) => {
-      const requestId = ++selectedSpeciesRequestId
       if (!cnddbOutputLayer) return
 
-      const selectedWhere = commonName ? `CNAME = '${escapeSqlLiteral(commonName)}'` : '1=1'
       cnddbOutputLayer.definitionExpression = '1=1'
-      cnddbOutputLayer.renderer = commonName ? cnddbSelectedRenderer() : cnddbDefaultRenderer()
-      if (cnddbLayerView) {
-        cnddbLayerView.filter = commonName ? { where: selectedWhere } : null
+      cnddbOutputLayer.renderer = cnddbDefaultRenderer()
+
+      if (!selectedCnddbOutputLayer) return
+
+      if (commonName) {
+        selectedCnddbOutputLayer.definitionExpression = `CNAME = '${escapeSqlLiteral(commonName)}'`
+        selectedCnddbOutputLayer.visible = true
+        cnddbOutputLayer.visible = false
         return
       }
 
-      void view.whenLayerView(cnddbOutputLayer).then((layerView) => {
-        cnddbLayerView = layerView
-        if (requestId === selectedSpeciesRequestId) {
-          cnddbLayerView.filter = commonName ? { where: selectedWhere } : null
-        }
-      }).catch(() => {
-        // Keep table selection working if the CNDDB layer view is not available yet.
-      })
+      selectedCnddbOutputLayer.visible = false
+      selectedCnddbOutputLayer.definitionExpression = '1=0'
+      cnddbOutputLayer.visible = true
     }
     applySelectedSpeciesRef.current = applySelectedSpecies
 
@@ -504,7 +516,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
         void (async () => {
           try {
             await applyArcGISTokenToLayer(cnddbOutputLayer)
-            cnddbLayerView = await view.whenLayerView(cnddbOutputLayer)
+            await applyArcGISTokenToLayer(selectedCnddbOutputLayer)
             bringReviewLayersToFront()
             if (!zoomedToCnddbOutput) {
               zoomedToCnddbOutput = true
@@ -543,6 +555,7 @@ export function ArcGISMap({ activeMapTool = null, webMapId, projectLayerUrl, buf
       userAddedFeatureLayers.forEach((layer) => layer.destroy())
       bufferOutputLayer?.destroy()
       cnddbOutputLayer?.destroy()
+      selectedCnddbOutputLayer?.destroy()
       view.destroy()
     }
   }, [bufferLayerUrl, cnddbLayerUrl, mapAddedLayers, onProjectSketchChange, onRemoveBufferLayer, onRemoveCnddbLayer, onRemoveMapLayer, onRemoveProjectLayer, reviewMode, webMapId])
