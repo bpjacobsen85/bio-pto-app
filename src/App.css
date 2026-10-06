@@ -2737,13 +2737,47 @@ input {
   border-bottom: 1px solid #dce3ea;
 }
 
+.home-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 .home-brand {
   display: flex;
   align-items: center;
   gap: 14px;
-  max-width: 920px;
-  margin: 0 auto;
-  width: 100%;
+}
+
+.home-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.home-account-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: #263542;
+  font-weight: 600;
+}
+
+.home-account-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .home-account-name { display: none; }
 }
 
 .home-logo {

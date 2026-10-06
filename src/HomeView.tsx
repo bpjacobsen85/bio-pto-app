@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { FolderOpen, Leaf, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FolderOpen, Leaf, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ProjectMeta } from './projectStore'
 
 type HomeViewProps = {
   projects: ProjectMeta[]
+  userLabel: string
+  onSignOut: () => void
   onNew: (name: string, client: string) => void
   onOpen: (id: string) => void
   onRename: (id: string, name: string) => void
@@ -28,7 +30,7 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export function HomeView({ projects, onNew, onOpen, onRename, onDelete }: HomeViewProps) {
+export function HomeView({ projects, userLabel, onSignOut, onNew, onOpen, onRename, onDelete }: HomeViewProps) {
   const [newName, setNewName] = useState('')
   const [newClient, setNewClient] = useState('')
   const canCreate = newName.trim().length > 0 && newClient.trim().length > 0
@@ -50,12 +52,24 @@ export function HomeView({ projects, onNew, onOpen, onRename, onDelete }: HomeVi
   return (
     <main className="home-shell">
       <header className="home-header">
+        <div className="home-header-inner">
         <div className="home-brand">
           <span className="home-logo"><Leaf size={22} /></span>
           <div>
             <h1>Potential to Occur</h1>
             <p className="app-subtitle">Species screening</p>
           </div>
+        </div>
+        <div className="home-account">
+          <span className="home-account-user">
+            <span className="user-avatar">{(userLabel || '?').slice(0, 1).toUpperCase()}</span>
+            <span className="home-account-name">{userLabel || 'Signed in'}</span>
+          </span>
+          <button type="button" className="secondary-button" onClick={onSignOut} title="Sign out of ArcGIS">
+            <LogOut size={16} />
+            Sign out
+          </button>
+        </div>
         </div>
       </header>
 

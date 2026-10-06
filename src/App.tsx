@@ -1823,6 +1823,8 @@ function App() {
     return (
       <HomeView
         projects={projects}
+        userLabel={user ? (user.fullName || user.username) : ''}
+        onSignOut={handleSignOut}
         onNew={handleNewProject}
         onOpen={handleOpenProject}
         onRename={handleRenameProject}
