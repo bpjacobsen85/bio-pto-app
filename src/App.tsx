@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
   ChevronRight,
@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Layers3,
   Map as MapIcon,
+  Home,
   PanelLeftClose,
   PanelLeftOpen,
   PencilLine,
@@ -13,6 +14,7 @@ import {
   Plus,
   RotateCcw,
   Ruler,
+  Save,
   Search,
   Settings2,
   ShieldCheck,
@@ -21,9 +23,20 @@ import {
   X,
 } from 'lucide-react'
 import './App.css'
-import { credentialReadyEventName, getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
+import { getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, type ArcgisUser } from './arcgisAuth'
 import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from './arcgisGp'
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
+import { HomeView } from './HomeView'
+import {
+  createProject,
+  deleteProject as deleteStoredProject,
+  getProject,
+  listProjects,
+  renameProject as renameStoredProject,
+  saveSnapshot,
+  type ProjectMeta,
+  type ProjectSnapshot,
+} from './projectStore'
 
 type Rating = 'High' | 'Moderate' | 'Low' | 'No Potential' | 'Needs Review'
 type MapTool = 'layers' | 'measure' | 'sketch' | null
@@ -90,6 +103,7 @@ type PtoCriteria = {
   highDistance: number
   moderateDistance: number
   lowDistance: number
+  currentWindowYears: number
 }
 
 type PortalLayerItem = {
@@ -127,6 +141,11 @@ type MapAddedLayer = {
 }
 
 const defaultProjectLayerUrl = import.meta.env.VITE_TEST_PROJECT_LAYER_URL || ''
+// Sample PG&E Newark-Dixon test services. Kept as a one-click sample in the
+// "load existing results" form, but NOT auto-loaded: the app opens on a clean
+// first-visit canvas (draw input or load an existing feature service).
+const sampleCnddbLayerUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_Newark_Dixon_Route_Segments_v1_CNDDB_clip_20260602_151819/FeatureServer/0'
+const sampleStatsTableUrl = 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/PGE_Newark_Dixon_Route_Segments_v1_All_Stats_20260602_151457/FeatureServer/0'
 const defaultCnddbLayerUrl = ''
 const defaultStatsTableUrl = ''
 const defaultFullCnddbLayerUrl = import.meta.env.VITE_TEST_FULL_CNDDB_LAYER_URL || 'https://services.arcgis.com/VxSYUpY4jQBSUpJ5/arcgis/rest/services/_CNDDB_Full_CA_view_temp/FeatureServer/0'
@@ -580,12 +599,13 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [activeMapTool, setActiveMapTool] = useState<MapTool>(null)
   const [projectName, setProjectName] = useState('')
+  const [projectClient, setProjectClient] = useState('')
   const [projectLayerUrl, setProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [loadedProjectLayerUrl, setLoadedProjectLayerUrl] = useState(defaultProjectLayerUrl)
   const [statsTableUrl, setStatsTableUrl] = useState(defaultStatsTableUrl)
   const [cnddbLayerUrl, setCnddbLayerUrl] = useState(defaultCnddbLayerUrl)
-  const [existingSummaryTableUrl, setExistingSummaryTableUrl] = useState('')
-  const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState('')
+  const [existingSummaryTableUrl, setExistingSummaryTableUrl] = useState(sampleStatsTableUrl)
+  const [existingCnddbLayerUrl, setExistingCnddbLayerUrl] = useState(sampleCnddbLayerUrl)
   const [bufferLayerUrl, setBufferLayerUrl] = useState('')
   const [speciesResults, setSpeciesResults] = useState<SpeciesResult[]>([])
   const [statsStatus, setStatsStatus] = useState<StatsStatus>('idle')
@@ -625,11 +645,18 @@ function App() {
   const [mapAddedLayers, setMapAddedLayers] = useState<MapAddedLayer[]>([])
   const signInPromiseRef = useRef<Promise<ArcgisUser> | null>(null)
   const portalLayerRequestIdRef = useRef(0)
+  const detailPanelRef = useRef<HTMLDivElement | null>(null)
+  const workspaceRef = useRef<HTMLElement | null>(null)
+  // When opening a saved project, hold its review edits so the stats-table
+  // reload re-applies them instead of clearing to {} on success.
+  const restoreReviewEditsRef = useRef<Record<number, SpeciesReviewEdit> | null>(null)
+  const [reviewResultsWidth, setReviewResultsWidth] = useState(760)
   const [ptoCriteria, setPtoCriteria] = useState<PtoCriteria>({
     bufferDistance: 5,
     highDistance: 0.25,
     moderateDistance: 1,
     lowDistance: 5,
+    currentWindowYears: 30,
   })
   const [projectSketch, setProjectSketch] = useState<ProjectSketchSummary>({
     source: 'Demo',
@@ -638,30 +665,27 @@ function App() {
     isReadyForAnalysis: false,
     warning: 'Draw a project feature or load a feature service layer to create project_input.',
   })
+  const [appView, setAppView] = useState<'home' | 'workspace'>('home')
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
+  const [projects, setProjects] = useState<ProjectMeta[]>(() => listProjects())
+  const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle')
 
   useEffect(() => {
     let alive = true
     clearSavedAnalysisRun()
 
-    const refreshSession = () => {
-      restoreArcGISSession()
+    restoreArcGISSession()
       .then((restoredUser) => {
         if (!alive) return
         if (restoredUser) setUser(restoredUser)
         setAuthStatus('idle')
       })
       .catch(() => {
-        if (!alive) return
-        setAuthStatus('idle')
+        if (alive) setAuthStatus('idle')
       })
-    }
-
-    refreshSession()
-    window.addEventListener(credentialReadyEventName, refreshSession)
 
     return () => {
       alive = false
-      window.removeEventListener(credentialReadyEventName, refreshSession)
     }
   }, [])
 
@@ -676,6 +700,10 @@ function App() {
         setStatsMessage('No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
         return
       }
+
+      // NOTE(debug): sign-in gate lifted at the user's request while the stats table is
+      // public, so the species list + all table-driven filtering work without login.
+      // Restore the `if (!user) { ...error... return }` block before shipping.
 
       setStatsStatus('loading')
       setStatsMessage('Loading notebook output and species library descriptions...')
@@ -770,7 +798,8 @@ function App() {
 
         if (!alive) return
         setSpeciesResults(rows)
-        setReviewEdits({})
+        setReviewEdits(restoreReviewEditsRef.current ?? {})
+        restoreReviewEditsRef.current = null
         setReviewSaveStatus('idle')
         setReviewSaveMessage('')
         setSelectedSpeciesId(null)
@@ -843,13 +872,43 @@ function App() {
     && ptoCriteria.highDistance <= ptoCriteria.moderateDistance
     && ptoCriteria.moderateDistance <= ptoCriteria.lowDistance
     && ptoCriteria.lowDistance <= ptoCriteria.bufferDistance
+    && Number.isInteger(ptoCriteria.currentWindowYears)
+    && ptoCriteria.currentWindowYears >= 0
   )
   const highDistanceLabel = formatCriteriaMiles(ptoCriteria.highDistance)
   const moderateDistanceLabel = formatCriteriaMiles(ptoCriteria.moderateDistance)
   const lowDistanceLabel = formatCriteriaMiles(ptoCriteria.lowDistance)
+  const currentCutoffYear = new Date().getFullYear() - ptoCriteria.currentWindowYears
   const hasResults = speciesResults.length > 0 || Boolean(statsTableUrl.trim()) || analysisStatus === 'ready'
   const isReviewingResults = setupCollapsed && hasResults
+  // Which setup step the user is on, so the numbered badges act as a live guide
+  // (1 = define project, 2 = set criteria & run, 3 = results loaded) instead of a static "1".
+  const currentSetupStep = hasResults ? 3 : projectSketch.isReadyForAnalysis ? 2 : 1
   const hasSpeciesFilters = speciesTypeFilter !== 'All' || ratingFilter !== null || conservationFilters.length > 0
+  // Common names currently shown by the table's filters, used to filter the CNDDB map layer.
+  // null = no active filter (show every feature). Memoized so it only changes when filters do.
+  const visibleSpeciesNames = useMemo<string[] | null>(
+    () => (hasSpeciesFilters ? filteredSpeciesResults.map((row) => row.common) : null),
+    [hasSpeciesFilters, filteredSpeciesResults],
+  )
+  // Each species' common name + its (possibly review-edited) final rating, so the map can
+  // symbolize CNDDB features by PTO potential with the same colors as the rating widgets.
+  const speciesRatings = useMemo(
+    () => speciesResults.map((row) => ({ name: row.common, rating: finalPotentialForSpecies(row, reviewEdits) })),
+    [speciesResults, reviewEdits],
+  )
+
+  // Selecting a species (from the list or by clicking a polygon) should make the
+  // "Review of species" detail the focus, not leave it stranded below the list.
+  useEffect(() => {
+    if (selectedSpeciesId === null) return
+    detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [selectedSpeciesId])
+  const activeWebMapId = user ? defaultWebMapId : ''
+  const activeBufferLayerUrl = user ? bufferLayerUrl : ''
+  // NOTE(debug): sign-in gate bypassed at the user's request while these layers are public,
+  // so the map/results load without login for freeze testing. Restore `user ? cnddbLayerUrl : ''`.
+  const activeCnddbLayerUrl = cnddbLayerUrl
 
   async function ensureSignedIn() {
     if (user) return user
@@ -900,6 +959,29 @@ function App() {
     setActiveMapTool((current) => current === tool ? null : tool)
   }
 
+  // Drag the map/review-panel divider (Map View review only). Session-only; balanced clamps.
+  function startReviewResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    const onMove = (moveEvent: PointerEvent) => {
+      const rect = workspaceRef.current?.getBoundingClientRect()
+      if (!rect) return
+      // Panel floor (700) keeps its list+detail columns from overflowing; the ceiling lets
+      // the panel grow (map shrink) down to a ~340px map. 14 = workspace padding, 14 = gap.
+      const panelMin = 720
+      const panelMax = Math.max(panelMin, rect.width - 28 - 14 - 340)
+      const next = rect.right - 14 - moveEvent.clientX
+      setReviewResultsWidth(Math.min(panelMax, Math.max(panelMin, Math.round(next))))
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.userSelect = ''
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
   function selectSpeciesForReview(objectId: number | null) {
     setSelectedSpeciesId((current) => current === objectId ? null : objectId)
     setReviewSaveStatus('idle')
@@ -932,6 +1014,11 @@ function App() {
 
   function handleSelectSpeciesFromMap(commonName: string) {
     const normalizedName = commonName.trim().toLowerCase()
+    // Empty name = a click on empty map space: clear the current selection.
+    if (!normalizedName) {
+      if (selectedSpeciesId !== null) selectSpeciesForReview(null)
+      return
+    }
     const matchedSpecies = speciesResults.find((row) => row.common.trim().toLowerCase() === normalizedName)
     if (!matchedSpecies) return
 
@@ -1113,6 +1200,7 @@ function App() {
   }
 
   function handleBrowseMapLayers() {
+    setSetupCollapsed(false)
     setLayerBrowserMode('map-layer')
     setPortalSearchScope('mine')
     setSelectedPortalFolderId('all')
@@ -1307,6 +1395,11 @@ function App() {
         {
           project_input: projectInput,
           project_name: projectName.trim() || 'BIO_PTO_Project',
+          buffer_distance_mi: ptoCriteria.bufferDistance,
+          high_distance_mi: ptoCriteria.highDistance,
+          moderate_distance_mi: ptoCriteria.moderateDistance,
+          low_distance_mi: ptoCriteria.lowDistance,
+          current_window_years: ptoCriteria.currentWindowYears,
         },
         (status) => {
           setAnalysisStatus(status.status === 'esriJobSubmitted' ? 'submitting' : 'running')
@@ -1364,8 +1457,8 @@ function App() {
     setLoadedProjectLayerUrl(defaultProjectLayerUrl)
     setStatsTableUrl(defaultStatsTableUrl)
     setCnddbLayerUrl(defaultCnddbLayerUrl)
-    setExistingSummaryTableUrl('')
-    setExistingCnddbLayerUrl('')
+    setExistingSummaryTableUrl(sampleStatsTableUrl)
+    setExistingCnddbLayerUrl(sampleCnddbLayerUrl)
     setBufferLayerUrl('')
     setSpeciesResults([])
     setSelectedSpeciesId(null)
@@ -1396,6 +1489,127 @@ function App() {
     setReportMessage('')
     setReportLinks({ animals: '', plants: '', excel: '' })
   }
+
+  // ---- Project save / open (storage backend A: browser localStorage) ----
+
+  const captureSnapshot = useCallback((): ProjectSnapshot => ({
+    client: projectClient,
+    projectName,
+    projectLayerUrl,
+    loadedProjectLayerUrl,
+    statsTableUrl,
+    cnddbLayerUrl,
+    bufferLayerUrl,
+    existingSummaryTableUrl,
+    existingCnddbLayerUrl,
+    ptoCriteria,
+    projectSketch,
+    reviewEdits,
+  }), [projectClient, projectName, projectLayerUrl, loadedProjectLayerUrl, statsTableUrl, cnddbLayerUrl, bufferLayerUrl, existingSummaryTableUrl, existingCnddbLayerUrl, ptoCriteria, projectSketch, reviewEdits])
+
+  function handleNewProject(name: string, client: string) {
+    handleResetAnalysis()
+    setProjectName(name)
+    setProjectClient(client)
+    setPtoCriteria({ bufferDistance: 5, highDistance: 0.25, moderateDistance: 1, lowDistance: 5, currentWindowYears: 30 })
+    const snapshot: ProjectSnapshot = {
+      client,
+      projectName: name,
+      projectLayerUrl: defaultProjectLayerUrl,
+      loadedProjectLayerUrl: defaultProjectLayerUrl,
+      statsTableUrl: '',
+      cnddbLayerUrl: '',
+      bufferLayerUrl: '',
+      existingSummaryTableUrl: sampleStatsTableUrl,
+      existingCnddbLayerUrl: sampleCnddbLayerUrl,
+      ptoCriteria: { bufferDistance: 5, highDistance: 0.25, moderateDistance: 1, lowDistance: 5, currentWindowYears: 30 },
+      projectSketch: { source: 'Demo', featureCount: 0, geometryType: 'None', isReadyForAnalysis: false, warning: 'Draw a project feature or load a feature service layer to create project_input.' },
+      reviewEdits: {},
+    }
+    const created = createProject(name, client, snapshot)
+    setCurrentProjectId(created.id)
+    setProjects(listProjects())
+    setAppView('workspace')
+  }
+
+  function handleOpenProject(id: string) {
+    const project = getProject(id)
+    if (!project) return
+    const snapshot = project.snapshot
+    restoreReviewEditsRef.current = snapshot.reviewEdits as Record<number, SpeciesReviewEdit>
+    setProjectName(snapshot.projectName)
+    setProjectClient(snapshot.client ?? '')
+    setProjectLayerUrl(snapshot.projectLayerUrl)
+    setLoadedProjectLayerUrl(snapshot.loadedProjectLayerUrl)
+    setBufferLayerUrl(snapshot.bufferLayerUrl)
+    setExistingSummaryTableUrl(snapshot.existingSummaryTableUrl)
+    setExistingCnddbLayerUrl(snapshot.existingCnddbLayerUrl)
+    setPtoCriteria(snapshot.ptoCriteria)
+    setProjectSketch(snapshot.projectSketch)
+    setReviewEdits(snapshot.reviewEdits as Record<number, SpeciesReviewEdit>)
+    setCnddbLayerUrl(snapshot.cnddbLayerUrl)
+    setStatsTableUrl(snapshot.statsTableUrl)
+    setSelectedSpeciesId(null)
+    setRatingFilter(null)
+    setConservationFilters([])
+    setSpeciesTypeFilter('All')
+    const hasResults = Boolean(snapshot.statsTableUrl.trim())
+    setSetupCollapsed(hasResults)
+    setAnalysisStatus(hasResults ? 'ready' : 'idle')
+    setAnalysisMessage(hasResults
+      ? 'Project loaded. Reading the saved summary table.'
+      : 'No results loaded yet. Run analysis or load existing ArcGIS Online outputs.')
+    setReportStatus('idle')
+    setReportMessage('')
+    setReportLinks({ animals: '', plants: '', excel: '' })
+    setCurrentProjectId(id)
+    setAppView('workspace')
+  }
+
+  function handleSaveProject() {
+    if (!currentProjectId) return
+    saveSnapshot(currentProjectId, captureSnapshot())
+    setProjects(listProjects())
+    setSaveState('saved')
+    window.setTimeout(() => setSaveState('idle'), 1500)
+  }
+
+  function handleGoHome() {
+    if (currentProjectId) {
+      saveSnapshot(currentProjectId, captureSnapshot())
+    }
+    setProjects(listProjects())
+    setAppView('home')
+  }
+
+  function handleRenameProject(id: string, name: string) {
+    renameStoredProject(id, name)
+    if (id === currentProjectId) setProjectName(name)
+    setProjects(listProjects())
+  }
+
+  function handleDeleteProjectFromHome(id: string) {
+    deleteStoredProject(id)
+    if (id === currentProjectId) setCurrentProjectId(null)
+    setProjects(listProjects())
+  }
+
+  // Auto-save the open project ~0.6s after any capturable change settles.
+  // Guard: auto-save never downgrades a project that already has results back
+  // to an empty one (protects against a transient blank state, e.g. dev HMR or
+  // a mid-reset render). An explicit Save or Home still persists a real reset.
+  useEffect(() => {
+    if (appView !== 'workspace' || !currentProjectId) return
+    const snapshot = captureSnapshot()
+    const handle = window.setTimeout(() => {
+      const stored = getProject(currentProjectId)
+      const wouldDropResults = Boolean(stored?.snapshot.statsTableUrl?.trim()) && !snapshot.statsTableUrl.trim()
+      if (wouldDropResults) return
+      saveSnapshot(currentProjectId, snapshot)
+      setProjects(listProjects())
+    }, 600)
+    return () => window.clearTimeout(handle)
+  }, [appView, currentProjectId, captureSnapshot])
 
   async function updateSelectedReview(update: SpeciesReviewEdit) {
     if (!selectedSpecies) return
@@ -1555,18 +1769,39 @@ function App() {
     ))
   }
 
+  if (appView === 'home') {
+    return (
+      <HomeView
+        projects={projects}
+        onNew={handleNewProject}
+        onOpen={handleOpenProject}
+        onRename={handleRenameProject}
+        onDelete={handleDeleteProjectFromHome}
+      />
+    )
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
         <div className="brand-block">
-          <div className="brand-mark">BP</div>
+          <button className="home-link-button" type="button" onClick={handleGoHome} title="Back to projects">
+            <Home size={18} />
+          </button>
           <div>
-            <p className="eyebrow">ArcGIS Online powered</p>
-            <h1>BIO PTO Analysis</h1>
+            <p className="eyebrow">{[projectClient.trim(), projectName.trim()].filter(Boolean).join(' — ') || 'Potential to Occur'}</p>
+            <h1>Potential to Occur</h1>
+            <p className="app-subtitle">Species screening</p>
           </div>
         </div>
         <div className="header-actions">
           {authStatus === 'error' && <span className="auth-error">{authMessage}</span>}
+          {currentProjectId && (
+            <button className="secondary-button" type="button" onClick={handleSaveProject} title="Save project">
+              <Save size={16} />
+              {saveState === 'saved' ? 'Saved' : 'Save'}
+            </button>
+          )}
           {user ? (
             <button className="user-button" type="button" onClick={handleSignOut} title="Sign out of ArcGIS">
               <span className="user-avatar">{(user.fullName || user.username).slice(0, 1).toUpperCase()}</span>
@@ -1581,14 +1816,14 @@ function App() {
           <button className="icon-button" type="button" aria-label="Reset analysis" onClick={handleResetAnalysis}>
             <RotateCcw size={18} />
           </button>
-          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
+          <button className="primary-button" type="button" disabled={!projectSketch.isReadyForAnalysis || !criteriaValid || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
             <Play size={17} fill="currentColor" />
             {analysisStatus === 'submitting' || analysisStatus === 'running' ? 'Running...' : 'Run Analysis'}
           </button>
         </div>
       </header>
 
-      <section className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''} ${hasResults ? 'results-workspace' : ''} ${isReviewingResults && reviewLayout === 'table' ? 'table-review-workspace' : ''}`}>
+      <section ref={workspaceRef} style={{ '--review-results-w': `${reviewResultsWidth}px` } as CSSProperties} className={`workspace ${setupCollapsed ? 'setup-collapsed' : ''} ${hasResults ? 'results-workspace' : ''} ${isReviewingResults && reviewLayout === 'table' ? 'table-review-workspace' : ''}`}>
         <aside className={`setup-panel ${setupCollapsed ? 'collapsed' : ''}`} aria-label="Analysis setup">
           {setupCollapsed ? (
             <button className="setup-rail-button" type="button" onClick={() => setSetupCollapsed(false)} aria-label="Show analysis setup">
@@ -1603,7 +1838,7 @@ function App() {
               </button>
             </div>
           )}
-          <div className="panel-section active-step">
+          <div className={`panel-section ${currentSetupStep === 1 ? 'active-step' : currentSetupStep > 1 ? 'done-step' : ''}`}>
             <div className="section-heading">
               <span className="step-index">1</span>
               <div>
@@ -1806,13 +2041,13 @@ function App() {
                   : projectSketch.warning}
               </span>
             </div>
-            <button className="primary-button setup-run-button" type="button" disabled={!projectSketch.isReadyForAnalysis || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
+            <button className="primary-button setup-run-button" type="button" disabled={!projectSketch.isReadyForAnalysis || !criteriaValid || analysisStatus === 'submitting' || analysisStatus === 'running'} onClick={handleRunAnalysis}>
               <Play size={17} fill="currentColor" />
               {analysisStatus === 'submitting' || analysisStatus === 'running' ? 'Running Analysis...' : 'Run Analysis'}
             </button>
           </div>
 
-          <div className="panel-section">
+          <div className={`panel-section ${currentSetupStep === 2 ? 'active-step' : currentSetupStep > 2 ? 'done-step' : ''}`}>
             <div className="section-heading">
               <span className="step-index">2</span>
               <div>
@@ -1837,9 +2072,13 @@ function App() {
                 Low
                 <input type="number" min="0.01" step="0.25" value={ptoCriteria.lowDistance} onChange={(event) => updatePtoCriteria('lowDistance', event.target.value)} />
               </label>
+              <label>
+                Current window
+                <input type="number" min="0" step="1" value={ptoCriteria.currentWindowYears} onChange={(event) => updatePtoCriteria('currentWindowYears', event.target.value)} />
+              </label>
             </div>
             {!criteriaValid && (
-              <div className="criteria-warning">Distances must increase from High to Moderate to Low, and Low cannot exceed Buffer.</div>
+              <div className="criteria-warning">Distances must increase from High to Moderate to Low, Low cannot exceed Buffer, and the current window must be a whole number.</div>
             )}
             <div className="criteria-label">Advanced criteria</div>
             <div className="criteria-grid" aria-label="Advanced PTO criteria">
@@ -1851,7 +2090,8 @@ function App() {
               </div>
               <div className="criteria-card">
                 <strong>Record status</strong>
-                <span>Separates current, recent, historical, unknown, and extirpated records.</span>
+                <span>Current records are &lt;= {ptoCriteria.currentWindowYears} years old.</span>
+                <span>Run cutoff year: {currentCutoffYear}</span>
               </div>
               <div className="criteria-card">
                 <strong>Accuracy</strong>
@@ -1864,7 +2104,7 @@ function App() {
             </div>
           </div>
 
-          <div className="panel-section estimate-section">
+          <div className={`panel-section estimate-section ${currentSetupStep === 3 ? 'active-step' : ''}`}>
             <div className="section-heading">
               <span className="step-index">3</span>
               <div>
@@ -1908,8 +2148,17 @@ function App() {
             )}
           </div>
           <div className="map-canvas">
-            <ArcGISMap key={`${defaultWebMapId}|${loadedProjectLayerUrl}|${bufferLayerUrl}|${cnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={defaultWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={bufferLayerUrl} cnddbLayerUrl={cnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={handleRemoveMapLayer} onRemoveProjectLayer={handleRemoveProjectLayer} onRemoveBufferLayer={handleRemoveBufferLayer} onRemoveCnddbLayer={handleRemoveCnddbLayer} onSelectSpeciesFromMap={handleSelectSpeciesFromMap} />
+            <ArcGISMap key={`${activeWebMapId}|${loadedProjectLayerUrl}|${activeBufferLayerUrl}|${activeCnddbLayerUrl}|${isReviewingResults ? 'review' : 'setup'}`} webMapId={activeWebMapId} activeMapTool={activeMapTool} projectLayerUrl={loadedProjectLayerUrl} bufferLayerUrl={activeBufferLayerUrl} cnddbLayerUrl={activeCnddbLayerUrl} mapAddedLayers={mapAddedLayers} selectedSpeciesName={selectedSpeciesId === null ? undefined : selectedSpecies?.common} visibleSpeciesNames={visibleSpeciesNames} speciesRatings={speciesRatings} reviewMode={isReviewingResults} onProjectSketchChange={setProjectSketch} onRemoveMapLayer={handleRemoveMapLayer} onRemoveProjectLayer={handleRemoveProjectLayer} onRemoveBufferLayer={handleRemoveBufferLayer} onRemoveCnddbLayer={handleRemoveCnddbLayer} onSelectSpeciesFromMap={handleSelectSpeciesFromMap} />
           </div>
+          {isReviewingResults && reviewLayout === 'map' && (
+            <div
+              className="map-panel-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Drag to resize the map and review panel"
+              onPointerDown={startReviewResize}
+            />
+          )}
         </section>
 
         <aside className="results-panel" aria-label="Analysis results">
@@ -2100,36 +2349,37 @@ function App() {
             </div>
           </div>
 
-          <div className="detail-panel">
+          <div className="detail-panel" ref={detailPanelRef}>
             <div className="detail-heading">
-              {selectedSpecies ? <RatingPill rating={selectedPotential} /> : <RatingPill rating="Needs Review" />}
-              <ReviewStatusPill status={selectedReviewStatus} />
+              {selectedSpecies && <RatingPill rating={selectedPotential} />}
+              {selectedSpecies && <ReviewStatusPill status={selectedReviewStatus} />}
               <h2>{selectedSpecies?.common ?? (speciesResults.length ? 'Select a species' : 'No species loaded')}</h2>
               <p>{selectedSpecies ? `${selectedSpecies.scientific} - ${selectedSpecies.taxonGroup || selectedSpecies.speciesType}` : speciesResults.length ? `${speciesResults.length} species loaded. Click a row to review model evidence.` : statsMessage}</p>
             </div>
-            <div className="reason-card">
-              <div>
+            {selectedSpecies && (
+              <div className="reason-card">
                 <p className="eyebrow">Why this rating?</p>
-                <h3>{selectedPotential} potential</h3>
+                <ul>
+                  {getPtoReasonBullets(selectedSpecies).map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
               </div>
-              <ul>
-                {getPtoReasonBullets(selectedSpecies).map((reason) => <li key={reason}>{reason}</li>)}
-              </ul>
-            </div>
+            )}
+            {selectedSpecies && (
             <div className="evidence-list">
-              <span>Nearest record <strong>{formatMiles(selectedSpecies?.distanceMiles ?? null)}</strong></span>
-              <span>Location accuracy <strong>{selectedSpecies?.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
-              <span>Total records <strong>{formatCount(selectedSpecies?.frequency ?? null)}</strong></span>
-              <span>Extant records <strong>{formatCount(selectedSpecies?.extantCount ?? null)}</strong></span>
-              <span>Current ≤30 yr <strong>{formatCount(selectedSpecies?.currentCount ?? null)}</strong></span>
-              <span>Recent EO <strong>{formatCount(selectedSpecies?.recentCount ?? null)}</strong></span>
-              <span>Historical ≤30 yr <strong>{formatCount(selectedSpecies?.historicalCount ?? null)}</strong></span>
-              <span>Possibly extirpated <strong>{formatCount(selectedSpecies?.possiblyExtirpatedCount ?? null)}</strong></span>
-              <span>Extirpated <strong>{formatCount(selectedSpecies?.extirpatedCount ?? null)}</strong></span>
-              <span>Unknown EO <strong>{formatCount(selectedSpecies?.unknownCount ?? null)}</strong></span>
-              <span>Earliest record year <strong>{formatYear(selectedSpecies?.minYear ?? null)}</strong></span>
-              <span>Listing status <strong>{selectedSpecies ? getListingCodes(selectedSpecies.listings).map(getListingLabel).join('; ') || 'No listing shown' : '--'}</strong></span>
+              <span>Nearest record <strong>{formatMiles(selectedSpecies.distanceMiles)}</strong></span>
+              <span>Location accuracy <strong>{selectedSpecies.accuracyClass ? `Class ${selectedSpecies.accuracyClass}` : '--'}</strong></span>
+              <span>Total records <strong>{formatCount(selectedSpecies.frequency)}</strong></span>
+              <span>Extant records <strong>{formatCount(selectedSpecies.extantCount)}</strong></span>
+              <span>Current ≤30 yr <strong>{formatCount(selectedSpecies.currentCount)}</strong></span>
+              <span>Recent EO <strong>{formatCount(selectedSpecies.recentCount)}</strong></span>
+              <span>Historical ≤30 yr <strong>{formatCount(selectedSpecies.historicalCount)}</strong></span>
+              <span>Possibly extirpated <strong>{formatCount(selectedSpecies.possiblyExtirpatedCount)}</strong></span>
+              <span>Extirpated <strong>{formatCount(selectedSpecies.extirpatedCount)}</strong></span>
+              <span>Unknown EO <strong>{formatCount(selectedSpecies.unknownCount)}</strong></span>
+              <span>Earliest record year <strong>{formatYear(selectedSpecies.minYear)}</strong></span>
+              <span>Listing status <strong>{getListingCodes(selectedSpecies.listings).map(getListingLabel).join('; ') || 'No listing shown'}</strong></span>
             </div>
+            )}
             {selectedSpecies?.suitabilityReview && (
               <p className="reason-text">
                 <strong>Habitat suitability:</strong> {selectedSpecies.suitabilityReview}
@@ -2153,6 +2403,7 @@ function App() {
                 )}
               </div>
             )}
+            {selectedSpecies && (
             <div className="review-grid">
               <label className="review-field">
                 Review status
@@ -2191,6 +2442,7 @@ function App() {
                 <p>{automatedPtoSummary}</p>
               </section>
             </div>
+            )}
           </div>
         </aside>
       </section>

@@ -77,3 +77,60 @@
   box-shadow: none;
   border-radius: 8px;
 }
+
+.map-feature-popup {
+  position: absolute;
+  z-index: 6;
+  top: 58px;
+  right: 14px;
+  width: min(360px, calc(100% - 28px));
+  max-height: calc(100% - 86px);
+  overflow: hidden;
+  border: 1px solid #cbd6e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(27, 42, 55, .22);
+}
+
+.map-feature-popup header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e1e7ed;
+}
+
+.map-feature-popup header div { min-width: 0; display: grid; gap: 3px; }
+.map-feature-popup header strong { overflow-wrap: anywhere; }
+.map-feature-popup header span { color: #5b6b79; font-size: 12px; }
+.map-feature-popup header button { width: 28px; height: 28px; flex: 0 0 28px; border: 0; background: transparent; color: #40505e; font-size: 22px; cursor: pointer; }
+.map-feature-popup dl { max-height: 390px; margin: 0; overflow: auto; }
+.map-feature-popup dl div { display: grid; grid-template-columns: minmax(105px, 42%) minmax(0, 1fr); gap: 10px; padding: 8px 14px; border-bottom: 1px solid #edf1f4; font-size: 12px; }
+.map-feature-popup dt { color: #526473; font-weight: 700; }
+.map-feature-popup dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #172632; }
+
+.map-debug-panel {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 12px;
+  width: min(420px, calc(100% - 24px));
+  max-height: 190px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(26, 48, 66, .22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .92);
+  color: #24313d;
+  box-shadow: 0 14px 30px rgba(27, 42, 55, .16);
+  font-size: 11px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+.map-debug-panel strong {
+  font-size: 12px;
+}

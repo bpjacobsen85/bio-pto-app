@@ -36,18 +36,6 @@
   gap: 12px;
 }
 
-.brand-mark {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: #133b5c;
-  color: #fff;
-  font-weight: 800;
-  font-size: 14px;
-}
-
 .eyebrow {
   margin: 0 0 2px;
   color: #697785;
@@ -66,6 +54,13 @@ p {
 h1 {
   font-size: 22px;
   line-height: 1.1;
+}
+
+.app-subtitle {
+  margin: 3px 0 0;
+  color: #536272;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 h2 {
@@ -237,6 +232,12 @@ h3 {
 .active-step .step-index {
   background: #1b6ca8;
   color: #fff;
+}
+
+/* A step the user has moved past: filled but muted, so it reads as "done". */
+.done-step .step-index {
+  background: #cdd9e4;
+  color: #3b566d;
 }
 
 .upload-target,
@@ -907,6 +908,40 @@ input {
   background: #dbe7e2;
 }
 
+/* Drag handle on the map/panel boundary — only meaningful when they sit side by side. */
+.map-panel-resizer { display: none; }
+
+@media (min-width: 1181px) {
+  .map-panel-resizer {
+    display: flex;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    z-index: 6;
+    touch-action: none;
+  }
+
+  .map-panel-resizer::after {
+    content: '';
+    width: 4px;
+    height: 46px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, .78);
+    box-shadow: 0 0 0 1px rgba(27, 42, 55, .3);
+    transition: background .12s ease, box-shadow .12s ease;
+  }
+
+  .map-panel-resizer:hover::after {
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(27, 42, 55, .5);
+  }
+}
+
 .map-toolbar {
   position: absolute;
   z-index: 3;
@@ -1165,11 +1200,11 @@ input {
 }
 
 .summary-card {
-  min-height: 70px;
-  padding: 11px;
+  min-height: 0;
+  padding: 8px 10px;
   border: 0;
   border-radius: 8px;
-  border-left: 5px solid currentColor;
+  border-left: 4px solid currentColor;
   background: #fff;
   box-shadow: inset 0 0 0 1px #e1e8ef;
   cursor: pointer;
@@ -1189,26 +1224,33 @@ input {
 
 .summary-card span {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.15;
   color: #657484;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .summary-card strong {
   display: block;
-  margin-top: 6px;
-  font-size: 26px;
+  margin-top: 2px;
+  font-size: 19px;
+  line-height: 1;
   color: #17202a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.high { color: #d64545; }
-.moderate { color: #e59f2a; }
-.low { color: #2f8f5b; }
-.no-potential { color: #8a94a6; }
-.needs-review { color: #7c5cc4; }
+/* Darker variants of the colorblind-safe scale so they read as text on white
+   (pure gold/pink/teal are too light for small text). */
+.high { color: #c2540a; }
+.moderate { color: #9a7a00; }
+.low { color: #007d5a; }
+.no-potential { color: #7c7c7c; }
+.needs-review { color: #a14c7c; }
 
 .summary-card.neutral {
   color: #5f6b7a;
@@ -1863,7 +1905,9 @@ input {
 
 .species-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 58px;
+  /* auto (not a fixed pill column) so each row's pill hugs its name instead of
+     reserving the widest-pill width and leaving a gap after short pills. */
+  grid-template-columns: auto minmax(0, 1fr) 58px;
   align-items: center;
   gap: 8px;
   min-height: 66px;
@@ -1902,11 +1946,12 @@ input {
   white-space: nowrap;
 }
 
-.rating-pill.high { background: #d64545; }
-.rating-pill.moderate { background: #e59f2a; }
-.rating-pill.low { background: #2f8f5b; }
-.rating-pill.no-potential { background: #8a94a6; }
-.rating-pill.needs-review { background: #7c5cc4; }
+.rating-pill.high { background: #d55e00; }
+/* Gold, gray and pink can't carry white text at a readable contrast; use dark text. */
+.rating-pill.moderate { background: #e6b800; color: #4a3b00; }
+.rating-pill.low { background: #009e73; }
+.rating-pill.no-potential { background: #999999; color: #2e2e2e; }
+.rating-pill.needs-review { background: #cc79a7; color: #3f2230; }
 
 .review-status-pill {
   width: fit-content;
@@ -2191,7 +2236,7 @@ input {
   }
 
   .workspace.setup-collapsed .species-row {
-    grid-template-columns: 92px minmax(0, 1fr) 58px;
+    grid-template-columns: auto minmax(0, 1fr) 58px;
   }
 
   .workspace.setup-collapsed .species-name em,
@@ -2297,7 +2342,7 @@ input {
 
 /* Results workspace keeps the map visible after setup/model execution. */
 .workspace.results-workspace.setup-collapsed {
-  grid-template-columns: minmax(380px, 42vw) minmax(760px, 1fr);
+  grid-template-columns: minmax(340px, 1fr) var(--review-results-w, 760px);
 }
 
 .workspace.results-workspace.setup-collapsed .setup-panel {
@@ -2311,7 +2356,7 @@ input {
 .workspace.results-workspace.setup-collapsed .results-panel {
   grid-column: auto;
   display: grid;
-  grid-template-columns: minmax(420px, 1.1fr) minmax(340px, .9fr);
+  grid-template-columns: minmax(360px, 1.1fr) minmax(300px, .9fr);
   grid-auto-rows: min-content;
   gap: 12px;
   align-content: start;
@@ -2322,9 +2367,6 @@ input {
 
 .workspace.results-workspace.setup-collapsed .review-header {
   grid-column: 1 / -1;
-  position: sticky;
-  top: 0;
-  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2345,25 +2387,48 @@ input {
 .workspace.results-workspace.setup-collapsed .summary-grid {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
   margin-bottom: 0;
 }
 
 .workspace.results-workspace.setup-collapsed .summary-card {
-  min-height: 58px;
-  padding: 8px 9px;
+  min-height: 0;
+  padding: 6px 9px;
+  border-left-width: 4px;
+}
+
+.workspace.results-workspace.setup-collapsed .summary-card span {
+  font-size: 10.5px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workspace.results-workspace.setup-collapsed .summary-card strong {
-  margin-top: 3px;
-  font-size: 20px;
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 1;
 }
 
 .workspace.results-workspace.setup-collapsed .report-action-row {
   grid-column: 1 / -1;
   align-items: center;
   margin-bottom: 0;
+  /* Generate Report is in the header and the progress counts are shown by the "Reviewed"
+     widget, so this row's only remaining content (download cards) is styled on its own —
+     drop the card chrome and padding so nothing renders as an empty little bar. */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Redundant here — the "Reviewed x/54" widget already shows this. Hiding it also removes
+   the 0-height grid-row overflow that made the text bleed behind the Species Results card. */
+.workspace.results-workspace.setup-collapsed .review-progress-strip {
+  display: none;
 }
 
 .workspace.results-workspace.setup-collapsed .report-secondary-button {
@@ -2399,7 +2464,7 @@ input {
 }
 
 .workspace.results-workspace.setup-collapsed .species-row {
-  grid-template-columns: 92px minmax(0, 1fr) 70px;
+  grid-template-columns: auto minmax(0, 1fr) 70px;
   min-height: 66px;
   gap: 8px;
 }
@@ -2407,6 +2472,14 @@ input {
 .workspace.results-workspace.setup-collapsed .species-name em,
 .workspace.results-workspace.setup-collapsed .species-name small {
   display: block;
+}
+
+/* Distance cell ("Crosses Project" / "x mi") was inheriting the 16px row base, so it read
+   larger than the name/listings beside it. Match it to the rest of the row. */
+.workspace.results-workspace.setup-collapsed .species-row > span:nth-child(4) {
+  font-size: 12px;
+  line-height: 1.25;
+  color: #4b5a68;
 }
 
 .workspace.results-workspace.setup-collapsed .detail-panel {
@@ -2588,7 +2661,303 @@ input {
   }
 }
 
+/* ---- Home / project launcher ---- */
+.home-shell {
+  min-height: 100vh;
+  background: #eef2f5;
+  color: #17202a;
+  display: flex;
+  flex-direction: column;
+}
 
+.home-header {
+  padding: 28px 24px;
+  background: #fbfcfd;
+  border-bottom: 1px solid #dce3ea;
+}
 
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+}
 
+.home-logo {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 10px;
+  background: #e4f0e8;
+  color: #2f7d52;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-body {
+  flex: 1;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.home-new-card {
+  background: #fff;
+  border: 1px solid #dce3ea;
+  border-radius: 12px;
+  padding: 22px 22px 24px;
+  box-shadow: 0 1px 2px rgba(23, 32, 42, 0.04);
+}
+
+.home-new-copy h2 {
+  font-size: 18px;
+}
+
+.home-new-copy p {
+  margin: 6px 0 16px;
+  color: #536272;
+  font-size: 13px;
+}
+
+.home-new-row {
+  display: flex;
+  gap: 10px;
+}
+
+.home-new-input {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid #cfd8e3;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: #17202a;
+  background: #fff;
+}
+
+.home-new-input:focus {
+  outline: none;
+  border-color: #1b6ca8;
+  box-shadow: 0 0 0 3px rgba(27, 108, 168, 0.15);
+}
+
+.home-new-row .primary-button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.home-new-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: #697785;
+  line-height: 1.5;
+}
+
+.home-new-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.home-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home-field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #536272;
+}
+
+.home-req {
+  color: #c0453d;
+  margin-left: 2px;
+}
+
+.home-create-button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.home-create-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.home-project-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-project-client {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #1b6ca8;
+}
+
+@media (max-width: 620px) {
+  .home-new-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.home-projects-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.home-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #536272;
+  background: #e3e9ef;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #697785;
+  text-align: center;
+  padding: 44px 20px;
+  background: #fff;
+  border: 1px dashed #cfd8e3;
+  border-radius: 12px;
+}
+
+.home-empty p {
+  font-size: 13px;
+}
+
+.home-project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home-project-card {
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid #dce3ea;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.home-project-card:hover {
+  border-color: #1b6ca8;
+  box-shadow: 0 2px 8px rgba(23, 32, 42, 0.07);
+}
+
+.home-project-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 16px 18px;
+  cursor: pointer;
+}
+
+.home-project-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #17202a;
+}
+
+.home-project-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-chip {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.chip-ready {
+  background: #e4f0e8;
+  color: #2f7d52;
+}
+
+.chip-draft {
+  background: #eef1f4;
+  color: #697785;
+}
+
+.chip-reviewed {
+  background: #e8eefb;
+  color: #3350a0;
+}
+
+.home-project-date {
+  font-size: 12px;
+  color: #697785;
+}
+
+.home-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-left: 1px solid #eef1f4;
+}
+
+.icon-button.danger:hover {
+  border-color: #d2524a;
+  color: #d2524a;
+}
+
+.home-link-button {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 1px solid #cfd8e3;
+  background: #fff;
+  color: #263542;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.home-link-button:hover {
+  border-color: #1b6ca8;
+  color: #1b6ca8;
+}
 
