@@ -27,6 +27,7 @@ import { getArcGISToken, restoreArcGISSession, signInToArcGIS, signOutOfArcGIS, 
 import { getNotebookJobOutput, outputUrl, outputValue, runNotebookWebTool } from './arcgisGp'
 import { ArcGISMap, type ProjectSketchSummary } from './ArcGISMap'
 import { HomeView } from './HomeView'
+import { SignInGate } from './SignInGate'
 import {
   createProject,
   deleteProject as deleteStoredProject,
@@ -1772,6 +1773,11 @@ function App() {
         ? current.filter((item) => item !== filter)
         : [...current, filter]
     ))
+  }
+
+  // Login-first gate: require an ArcGIS sign-in before the app is usable.
+  if (!user) {
+    return <SignInGate status={authStatus} message={authMessage} onSignIn={() => void handleSignIn()} />
   }
 
   if (appView === 'home') {

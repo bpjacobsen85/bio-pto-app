@@ -2661,6 +2661,67 @@ input {
   }
 }
 
+/* ---- Sign-in gate ---- */
+.auth-gate {
+  min-height: 100vh;
+  background: #eef2f5;
+  color: #17202a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border: 1px solid #dce3ea;
+  border-radius: 14px;
+  padding: 36px 32px 34px;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(23, 32, 42, 0.05);
+}
+
+.auth-logo {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+}
+
+.auth-card h1 {
+  font-size: 23px;
+}
+
+.auth-card .app-subtitle {
+  margin-top: 4px;
+}
+
+.auth-copy {
+  margin: 20px 0 20px;
+  color: #536272;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-button {
+  width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.auth-checking {
+  margin: 24px 0 2px;
+  color: #697785;
+  font-size: 14px;
+}
+
+.auth-error-text {
+  margin: 14px 0 0;
+  color: #c0453d;
+  font-size: 13px;
+}
+
 /* ---- Home / project launcher ---- */
 .home-shell {
   min-height: 100vh;
