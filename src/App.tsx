@@ -668,7 +668,7 @@ function App() {
   })
   const [appView, setAppView] = useState<'home' | 'workspace'>('home')
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
-  const [projects, setProjects] = useState<ProjectMeta[]>(() => listProjects())
+  const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle')
 
   useEffect(() => {
@@ -1513,7 +1513,23 @@ function App() {
     reviewEdits,
   }), [projectClient, projectName, projectLayerUrl, loadedProjectLayerUrl, statsTableUrl, cnddbLayerUrl, bufferLayerUrl, existingSummaryTableUrl, existingCnddbLayerUrl, ptoCriteria, projectSketch, reviewEdits])
 
-  function handleNewProject(name: string, client: string) {
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+
+  const refreshProjects = useCallback(async () => {
+    try {
+      setProjects(await listProjects())
+    } catch (error) {
+      console.error('Failed to load the shared project list', error)
+    }
+  }, [])
+
+  // Load the team-shared project list once signed in.
+  useEffect(() => {
+    if (user) void refreshProjects()
+  }, [user, refreshProjects])
+
+  async function handleNewProject(name: string, client: string) {
     handleResetAnalysis()
     setProjectName(name)
     setProjectClient(client)
@@ -1532,14 +1548,22 @@ function App() {
       projectSketch: { source: 'Demo', featureCount: 0, geometryType: 'None', isReadyForAnalysis: false, warning: 'Draw a project feature or load a feature service layer to create project_input.' },
       reviewEdits: {},
     }
-    const created = createProject(name, client, snapshot)
-    setCurrentProjectId(created.id)
-    setProjects(listProjects())
-    setAppView('workspace')
+    try {
+      const created = await createProject(name, client, snapshot)
+      setCurrentProjectId(created.id)
+      setAppView('workspace')
+      void refreshProjects()
+    } catch (error) {
+      console.error('Failed to create project', error)
+      window.alert('Could not create the project in ArcGIS. Check your connection and that you are signed in, then try again.')
+    }
   }
 
-  function handleOpenProject(id: string) {
-    const project = getProject(id)
+  async function handleOpenProject(id: string) {
+    const project = await getProject(id).catch((error) => {
+      console.error('Failed to open project', error)
+      return null
+    })
     if (!project) return
     const snapshot = project.snapshot
     restoreReviewEditsRef.current = snapshot.reviewEdits as Record<number, SpeciesReviewEdit>
@@ -1572,48 +1596,63 @@ function App() {
     setAppView('workspace')
   }
 
-  function handleSaveProject() {
+  async function handleSaveProject() {
     if (!currentProjectId) return
-    saveSnapshot(currentProjectId, captureSnapshot())
-    setProjects(listProjects())
-    setSaveState('saved')
-    window.setTimeout(() => setSaveState('idle'), 1500)
-  }
-
-  function handleGoHome() {
-    if (currentProjectId) {
-      saveSnapshot(currentProjectId, captureSnapshot())
+    try {
+      await saveSnapshot(currentProjectId, captureSnapshot())
+      setSaveState('saved')
+      window.setTimeout(() => setSaveState('idle'), 1500)
+      void refreshProjects()
+    } catch (error) {
+      console.error('Failed to save project', error)
     }
-    setProjects(listProjects())
+  }
+
+  async function handleGoHome() {
+    if (currentProjectId) {
+      try {
+        await saveSnapshot(currentProjectId, captureSnapshot())
+      } catch (error) {
+        console.error('Failed to save project before leaving', error)
+      }
+    }
     setAppView('home')
+    void refreshProjects()
   }
 
-  function handleRenameProject(id: string, name: string) {
-    renameStoredProject(id, name)
-    if (id === currentProjectId) setProjectName(name)
-    setProjects(listProjects())
+  async function handleRenameProject(id: string, name: string) {
+    try {
+      await renameStoredProject(id, name)
+      if (id === currentProjectId) setProjectName(name)
+      void refreshProjects()
+    } catch (error) {
+      console.error('Failed to rename project', error)
+    }
   }
 
-  function handleDeleteProjectFromHome(id: string) {
-    deleteStoredProject(id)
-    if (id === currentProjectId) setCurrentProjectId(null)
-    setProjects(listProjects())
+  async function handleDeleteProjectFromHome(id: string) {
+    try {
+      await deleteStoredProject(id)
+      if (id === currentProjectId) setCurrentProjectId(null)
+      void refreshProjects()
+    } catch (error) {
+      console.error('Failed to delete project', error)
+    }
   }
 
-  // Auto-save the open project ~0.6s after any capturable change settles.
-  // Guard: auto-save never downgrades a project that already has results back
-  // to an empty one (protects against a transient blank state, e.g. dev HMR or
-  // a mid-reset render). An explicit Save or Home still persists a real reset.
+  // Auto-save the open project ~1.2s after any capturable change settles.
+  // Guard: auto-save never downgrades a project that already has results back to
+  // an empty one (protects against a transient blank state). Uses the in-memory
+  // project list (projectsRef) so it does not hit the network just to check.
   useEffect(() => {
     if (appView !== 'workspace' || !currentProjectId) return
     const snapshot = captureSnapshot()
     const handle = window.setTimeout(() => {
-      const stored = getProject(currentProjectId)
-      const wouldDropResults = Boolean(stored?.snapshot.statsTableUrl?.trim()) && !snapshot.statsTableUrl.trim()
+      const storedMeta = projectsRef.current.find((project) => project.id === currentProjectId)
+      const wouldDropResults = Boolean(storedMeta?.summary.hasResults) && !snapshot.statsTableUrl.trim()
       if (wouldDropResults) return
-      saveSnapshot(currentProjectId, snapshot)
-      setProjects(listProjects())
-    }, 600)
+      void saveSnapshot(currentProjectId, snapshot).catch((error) => console.error('Auto-save failed', error))
+    }, 1200)
     return () => window.clearTimeout(handle)
   }, [appView, currentProjectId, captureSnapshot])
 

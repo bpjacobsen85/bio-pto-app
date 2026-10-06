@@ -1,17 +1,20 @@
 // Project persistence for the BIO PTO app.
 //
-// STORAGE BACKEND = A (browser localStorage). Projects live only in this
-// browser, on this machine. This is the deliberate first-pass backend.
+// STORAGE BACKEND = B (shared ArcGIS hosted table). Projects live in one hosted
+// table in ArcGIS Online, shared with the organization, so every signed-in team
+// member reads/writes the SAME list (survives devices and cache clears). One row
+// per project; the `snapshot` field holds the full serialized project state.
 //
-// To upgrade to B (shared ArcGIS Online storage so other staff can open a
-// project), reimplement ONLY the functions in this file to read/write a JSON
-// item in the signed-in user's ArcGIS content. The HomeView UI and App wiring
-// call these functions and do not care where the bytes live — keep these
-// signatures and the HomeView/App code is untouched.
+// Reads/writes go through the signed-in user's ArcGIS token, so all calls here
+// require an authenticated session (the app gates on sign-in before using these).
+//
+// The table URL comes from VITE_PROJECTS_TABLE_URL. If it is unset the functions
+// no-op gracefully (empty list), so the app still runs.
 
+import { getArcGISToken } from './arcgisAuth'
 import type { ProjectSketchSummary } from './ArcGISMap'
 
-const STORE_KEY = 'bioPto:projects:v1'
+const TABLE_URL = import.meta.env.VITE_PROJECTS_TABLE_URL || ''
 
 export type StoredPtoCriteria = {
   bufferDistance: number
@@ -43,7 +46,6 @@ export type ProjectSnapshot = {
   reviewEdits: Record<number, StoredReviewEdit>
 }
 
-// Small, cheap-to-render summary shown on the home-page cards.
 export type ProjectSummary = {
   hasResults: boolean
   reviewedCount: number
@@ -73,94 +75,141 @@ function newId(): string {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function readAll(): StoredProject[] {
-  try {
-    const raw = window.localStorage.getItem(STORE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is StoredProject =>
-      Boolean(item) && typeof item === 'object' && typeof (item as StoredProject).id === 'string')
-  } catch {
-    return []
-  }
+function escapeSql(value: string): string {
+  return value.replace(/'/g, "''")
 }
 
-function writeAll(projects: StoredProject[]): void {
-  try {
-    window.localStorage.setItem(STORE_KEY, JSON.stringify(projects))
-  } catch {
-    // Storage can be unavailable (private mode / blocked / quota). Saving is a
-    // best-effort convenience here; the running session still works in memory.
-  }
+/** POST a feature-service operation with the signed-in user's token. */
+async function postOp(op: string, params: Record<string, string>): Promise<Record<string, unknown>> {
+  if (!TABLE_URL) throw new Error('Project store is not configured (VITE_PROJECTS_TABLE_URL).')
+  const token = await getArcGISToken()
+  const body = new URLSearchParams({ ...params, f: 'json', token })
+  const res = await fetch(`${TABLE_URL}/${op}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  })
+  if (!res.ok) throw new Error(`ArcGIS ${op} request failed: ${res.status}`)
+  const data = await res.json() as Record<string, unknown>
+  const error = data.error as { message?: string } | undefined
+  if (error) throw new Error(error.message ?? `ArcGIS ${op} returned an error.`)
+  return data
 }
 
-function byModifiedDesc(a: ProjectMeta, b: ProjectMeta): number {
-  return b.modifiedAt.localeCompare(a.modifiedAt)
+type Row = { attributes: Record<string, unknown> }
+
+function rowToMeta(attrs: Record<string, unknown>): ProjectMeta {
+  return {
+    id: String(attrs.project_id ?? ''),
+    name: String(attrs.name ?? ''),
+    client: String(attrs.client ?? ''),
+    createdAt: String(attrs.created_at ?? ''),
+    modifiedAt: String(attrs.modified_at ?? ''),
+    summary: {
+      hasResults: Number(attrs.has_results) === 1,
+      reviewedCount: Number(attrs.reviewed_count ?? 0),
+    },
+  }
 }
 
 /** Lightweight list for the home screen (no snapshots), newest first. */
-export function listProjects(): ProjectMeta[] {
-  return readAll()
-    .map(({ snapshot: _snapshot, ...meta }) => meta)
-    .sort(byModifiedDesc)
+export async function listProjects(): Promise<ProjectMeta[]> {
+  if (!TABLE_URL) return []
+  const data = await postOp('query', {
+    where: '1=1',
+    outFields: 'project_id,client,name,created_at,modified_at,has_results,reviewed_count',
+    returnGeometry: 'false',
+    orderByFields: 'modified_at DESC',
+  })
+  const features = (data.features as Row[] | undefined) ?? []
+  return features.map((feature) => rowToMeta(feature.attributes))
 }
 
 /** Full project (with snapshot) for opening into the workspace. */
-export function getProject(id: string): StoredProject | null {
-  return readAll().find((project) => project.id === id) ?? null
+export async function getProject(id: string): Promise<StoredProject | null> {
+  if (!TABLE_URL) return null
+  const data = await postOp('query', {
+    where: `project_id='${escapeSql(id)}'`,
+    outFields: '*',
+    returnGeometry: 'false',
+  })
+  const feature = ((data.features as Row[] | undefined) ?? [])[0]
+  if (!feature) return null
+  const attrs = feature.attributes
+  let snapshot: ProjectSnapshot
+  try {
+    snapshot = JSON.parse(String(attrs.snapshot ?? '{}')) as ProjectSnapshot
+  } catch {
+    return null
+  }
+  return { ...rowToMeta(attrs), snapshot }
 }
 
-/** Create a brand-new empty project record and return it. */
-export function createProject(name: string, client: string, snapshot: ProjectSnapshot): StoredProject {
+/** Create a brand-new project row and return its metadata + snapshot. */
+export async function createProject(name: string, client: string, snapshot: ProjectSnapshot): Promise<StoredProject> {
+  const id = newId()
   const now = new Date().toISOString()
-  const project: StoredProject = {
-    id: newId(),
-    name: name.trim() || 'Untitled project',
+  const summary = summarize(snapshot)
+  const safeName = name.trim() || 'Untitled project'
+  const attributes = {
+    project_id: id,
+    name: safeName,
     client: client.trim(),
-    createdAt: now,
-    modifiedAt: now,
-    summary: summarize(snapshot),
-    snapshot,
+    created_at: now,
+    modified_at: now,
+    has_results: summary.hasResults ? 1 : 0,
+    reviewed_count: summary.reviewedCount,
+    snapshot: JSON.stringify(snapshot),
   }
-  const projects = readAll()
-  projects.push(project)
-  writeAll(projects)
-  return project
+  await postOp('addFeatures', { features: JSON.stringify([{ attributes }]) })
+  return { id, name: safeName, client: client.trim(), createdAt: now, modifiedAt: now, summary, snapshot }
+}
+
+async function findObjectId(id: string): Promise<number | null> {
+  const data = await postOp('query', {
+    where: `project_id='${escapeSql(id)}'`,
+    outFields: 'OBJECTID',
+    returnGeometry: 'false',
+  })
+  const feature = ((data.features as Row[] | undefined) ?? [])[0]
+  const objectId = feature ? Number(feature.attributes.OBJECTID) : NaN
+  return Number.isFinite(objectId) ? objectId : null
 }
 
 /** Persist the current snapshot for an existing project (updates modifiedAt). */
-export function saveSnapshot(id: string, snapshot: ProjectSnapshot): StoredProject | null {
-  const projects = readAll()
-  const index = projects.findIndex((project) => project.id === id)
-  if (index === -1) return null
-  const updated: StoredProject = {
-    ...projects[index],
-    name: (snapshot.projectName ?? '').trim() || projects[index].name,
-    client: (snapshot.client ?? '').trim() || projects[index].client,
-    modifiedAt: new Date().toISOString(),
-    summary: summarize(snapshot),
-    snapshot,
+export async function saveSnapshot(id: string, snapshot: ProjectSnapshot): Promise<void> {
+  if (!TABLE_URL) return
+  const objectId = await findObjectId(id)
+  if (objectId == null) return
+  const summary = summarize(snapshot)
+  const attributes: Record<string, unknown> = {
+    OBJECTID: objectId,
+    modified_at: new Date().toISOString(),
+    has_results: summary.hasResults ? 1 : 0,
+    reviewed_count: summary.reviewedCount,
+    snapshot: JSON.stringify(snapshot),
   }
-  projects[index] = updated
-  writeAll(projects)
-  return updated
+  const name = (snapshot.projectName ?? '').trim()
+  if (name) attributes.name = name
+  const client = (snapshot.client ?? '').trim()
+  if (client) attributes.client = client
+  await postOp('updateFeatures', { features: JSON.stringify([{ attributes }]) })
 }
 
-export function renameProject(id: string, name: string): void {
-  const projects = readAll()
-  const index = projects.findIndex((project) => project.id === id)
-  if (index === -1) return
-  projects[index] = {
-    ...projects[index],
-    name: name.trim() || projects[index].name,
-    modifiedAt: new Date().toISOString(),
-  }
-  writeAll(projects)
+export async function renameProject(id: string, name: string): Promise<void> {
+  if (!TABLE_URL) return
+  const objectId = await findObjectId(id)
+  if (objectId == null) return
+  const trimmed = name.trim()
+  if (!trimmed) return
+  await postOp('updateFeatures', {
+    features: JSON.stringify([{ attributes: { OBJECTID: objectId, name: trimmed, modified_at: new Date().toISOString() } }]),
+  })
 }
 
-export function deleteProject(id: string): void {
-  writeAll(readAll().filter((project) => project.id !== id))
+export async function deleteProject(id: string): Promise<void> {
+  if (!TABLE_URL) return
+  await postOp('deleteFeatures', { where: `project_id='${escapeSql(id)}'` })
 }
 
 function summarize(snapshot: ProjectSnapshot): ProjectSummary {
