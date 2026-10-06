@@ -701,9 +701,15 @@ function App() {
         return
       }
 
-      // NOTE(debug): sign-in gate lifted at the user's request while the stats table is
-      // public, so the species list + all table-driven filtering work without login.
-      // Restore the `if (!user) { ...error... return }` block before shipping.
+      // Sign-in gate: the summary table and CNDDB layers carry licensed data, so
+      // require an ArcGIS login before any query runs.
+      if (!user) {
+        setSpeciesResults([])
+        setSelectedSpeciesId(null)
+        setStatsStatus('idle')
+        setStatsMessage('Sign in with your ArcGIS account to load results.')
+        return
+      }
 
       setStatsStatus('loading')
       setStatsMessage('Loading notebook output and species library descriptions...')
@@ -906,9 +912,8 @@ function App() {
   }, [selectedSpeciesId])
   const activeWebMapId = user ? defaultWebMapId : ''
   const activeBufferLayerUrl = user ? bufferLayerUrl : ''
-  // NOTE(debug): sign-in gate bypassed at the user's request while these layers are public,
-  // so the map/results load without login for freeze testing. Restore `user ? cnddbLayerUrl : ''`.
-  const activeCnddbLayerUrl = cnddbLayerUrl
+  // Sign-in gate: CNDDB is licensed, so only feed the map layer once signed in.
+  const activeCnddbLayerUrl = user ? cnddbLayerUrl : ''
 
   async function ensureSignedIn() {
     if (user) return user
